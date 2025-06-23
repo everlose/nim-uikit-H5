@@ -140,14 +140,14 @@ import { replaceEmoji } from "../../utils";
 import { autorun } from "mobx";
 import emitter from "../../utils/eventBus";
 import Input from "../../CommonComponents/Input.vue";
-import {
+import type {
   V2NIMTeam,
   V2NIMTeamChatBannedMode,
   V2NIMTeamMember,
 } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService";
-import { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
-import { V2NIMMessage } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
+import type { V2NIMMessage } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
 import { toast } from "../../utils/toast";
 
 const { proxy } = getCurrentInstance()!; // 获取组件实例

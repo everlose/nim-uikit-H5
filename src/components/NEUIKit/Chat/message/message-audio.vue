@@ -24,8 +24,8 @@ import { ref, onUnmounted, computed, onMounted } from "vue";
 import Icon from "../../CommonComponents/Icon.vue";
 import { events } from "../../utils/constants";
 import emitter from "../../utils/eventBus";
-import { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
-import { V2NIMMessageAudioAttachment } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageAudioAttachment } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
 
 const props = withDefaults(
   defineProps<{

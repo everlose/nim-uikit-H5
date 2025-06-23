@@ -50,7 +50,7 @@ import { t } from "../../utils/i18n";
 import { ref, computed, getCurrentInstance } from "vue";
 import Modal from "../../CommonComponents/Modal.vue";
 import Avatar from "../../CommonComponents/Avatar.vue";
-import { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import Input from "../../CommonComponents/Input.vue";
 interface ForwardToTeamInfo {

@@ -97,7 +97,7 @@ import { t } from "../../utils/i18n";
 import NavBar from "../../CommonComponents/NavBar.vue";
 import { autorun } from "mobx";
 import type { Relation } from "@xkit-yx/im-store-v2";
-import { V2NIMUser } from "nim-web-sdk-ng/dist/v2/NIM_UNIAPP_SDK/V2NIMUserService";
+import type { V2NIMUser } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMUserService";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import Switch from "../../CommonComponents/Switch.vue";
 import { toast } from "../../utils/toast";

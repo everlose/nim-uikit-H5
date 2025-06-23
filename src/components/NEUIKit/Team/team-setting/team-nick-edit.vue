@@ -38,7 +38,7 @@ import { onUnmounted, ref, getCurrentInstance } from "vue";
 import Icon from "../../CommonComponents/Icon.vue";
 import NavBar from "../../CommonComponents/NavBar.vue";
 import { t } from "../../utils/i18n";
-import { V2NIMTeamMember } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService";
+import type { V2NIMTeamMember } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService";
 import { onMounted } from "vue";
 import RootStore from "@xkit-yx/im-store-v2";
 import Input from "../../CommonComponents/Input.vue";

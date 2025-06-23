@@ -65,7 +65,7 @@ import { t } from "../../utils/i18n";
 import Appellation from "../../CommonComponents/Appellation.vue";
 import Icon from "../../CommonComponents/Icon.vue";
 import Empty from "../../CommonComponents/Empty.vue";
-import {
+import type {
   V2NIMTeam,
   V2NIMTeamMember,
 } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService";

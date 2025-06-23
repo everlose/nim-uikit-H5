@@ -53,7 +53,7 @@
 /** 消息已读未读组件 */
 
 import { computed, ref, onMounted, onUnmounted, getCurrentInstance } from "vue";
-import { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
 import Icon from "../../CommonComponents/Icon.vue";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import { useRouter } from "vue-router";

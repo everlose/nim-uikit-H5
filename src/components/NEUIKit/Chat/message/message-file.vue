@@ -25,8 +25,8 @@
 <script lang="ts" setup>
 import { getFileType, parseFileSize } from "@xkit-yx/utils";
 import Icon from "../../CommonComponents/Icon.vue";
-import { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
-import { V2NIMMessageFileAttachment } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageFileAttachment } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
 
 const props = withDefaults(defineProps<{ msg: V2NIMMessageForUI }>(), {});
 

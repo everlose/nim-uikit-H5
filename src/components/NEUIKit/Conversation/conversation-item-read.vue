@@ -26,7 +26,7 @@
 import { computed, getCurrentInstance } from "vue";
 import Icon from "../CommonComponents/Icon.vue";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
-import {
+import type {
   V2NIMConversationForUI,
   V2NIMLocalConversationForUI,
 } from "@xkit-yx/im-store-v2/dist/types/types";

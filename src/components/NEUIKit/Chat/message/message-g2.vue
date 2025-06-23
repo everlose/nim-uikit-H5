@@ -10,7 +10,7 @@
 import Icon from "../../CommonComponents/Icon.vue";
 import { convertSecondsToTime } from "../../utils";
 import { g2StatusMap } from "../../utils/constants";
-import { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
 
 const props = withDefaults(defineProps<{ msg: V2NIMMessageForUI }>(), {});
 

@@ -27,7 +27,6 @@ import Appellation from "../../CommonComponents/Appellation.vue";
 import NavBar from "../../CommonComponents/NavBar.vue";
 import { t } from "../../utils/i18n";
 import RootStore from "@xkit-yx/im-store-v2";
-import { V2NIMUser } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMUserService";
 import { toast } from "../../utils/toast";
 
 const blacklist = ref<string[]>([]);

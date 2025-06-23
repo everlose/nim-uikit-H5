@@ -38,10 +38,10 @@ import {
 import MessageItem from "./message-item.vue";
 import { caculateTimeago } from "../../utils/date";
 import { t } from "../../utils/i18n";
-import { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import { autorun } from "mobx";
-import { V2NIMTeam } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService";
+import type { V2NIMTeam } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService";
 import emitter from "../../utils/eventBus";
 import { events } from "../../utils/constants";
 

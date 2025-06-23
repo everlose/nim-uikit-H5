@@ -338,7 +338,7 @@ import Icon from "../../CommonComponents/Icon.vue";
 import { events } from "../../utils/constants";
 import { neUiKitRouterPath } from "../../utils/uikitRouter";
 import { autorun } from "mobx";
-import { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import { msgRecallTime } from "../../utils/constants";
 import { t } from "../../utils/i18n";

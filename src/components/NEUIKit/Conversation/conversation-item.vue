@@ -82,7 +82,7 @@ import { computed, onUpdated, getCurrentInstance } from "vue";
 import dayjs from "dayjs";
 import { t } from "../utils/i18n";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
-import {
+import type {
   V2NIMConversationForUI,
   V2NIMLocalConversationForUI,
 } from "@xkit-yx/im-store-v2/dist/types/types";
