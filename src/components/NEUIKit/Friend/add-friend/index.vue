@@ -60,7 +60,7 @@ import Button from "../../CommonComponents/Button.vue";
 import { autorun } from "mobx";
 import type { Relation } from "@xkit-yx/im-store-v2";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
-import { V2NIMUser } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMUserService";
+import type { V2NIMUser } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMUserService";
 import Input from "../../CommonComponents/Input.vue";
 import { useRouter } from "vue-router";
 import { showToast } from "../../utils/toast";

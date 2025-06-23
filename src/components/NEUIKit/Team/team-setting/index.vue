@@ -113,12 +113,12 @@ import { ref, computed, onUnmounted, getCurrentInstance } from "vue";
 import { autorun } from "mobx";
 import { t } from "../../utils/i18n";
 
-import {
+import type {
   V2NIMTeam,
   V2NIMTeamMember,
 } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
-import {
+import type {
   V2NIMConversationForUI,
   V2NIMLocalConversationForUI,
 } from "@xkit-yx/im-store-v2/dist/types/types";

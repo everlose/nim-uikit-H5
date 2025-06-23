@@ -40,11 +40,11 @@ import { ref, onUnmounted, getCurrentInstance, onMounted } from "vue";
 import { autorun } from "mobx";
 import { t } from "../../utils/i18n";
 import { useRouter } from "vue-router";
-import {
+import type {
   V2NIMTeam,
   V2NIMTeamMember,
 } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService";
-import {
+import type {
   V2NIMConversationForUI,
   V2NIMLocalConversationForUI,
 } from "@xkit-yx/im-store-v2/dist/types/types";

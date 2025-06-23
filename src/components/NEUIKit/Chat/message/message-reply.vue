@@ -115,7 +115,7 @@ import { ref, onMounted, computed, getCurrentInstance, onUnmounted } from "vue";
 import MessageText from "./message-text.vue";
 import { REPLY_MSG_TYPE_MAP } from "../../utils/constants";
 import { autorun } from "mobx";
-import { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import MessageAudio from "./message-audio.vue";
 import Icon from "../../CommonComponents/Icon.vue";

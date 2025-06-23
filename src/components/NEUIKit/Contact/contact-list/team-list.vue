@@ -25,7 +25,7 @@ import Empty from "../../CommonComponents/Empty.vue";
 import Avatar from "../../CommonComponents/Avatar.vue";
 import NavBar from "../../CommonComponents/NavBar.vue";
 import { t } from "../../utils/i18n";
-import { V2NIMTeam } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService";
+import type { V2NIMTeam } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService";
 import { useRouter } from "vue-router";
 import RootStore from "@xkit-yx/im-store-v2";
 import { neUiKitRouterPath } from "../../utils/uikitRouter";

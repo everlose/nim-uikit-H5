@@ -34,7 +34,7 @@ import { onUnmounted, ref } from "vue";
 import Icon from "../CommonComponents/Icon.vue";
 import { autorun } from "mobx";
 import { t } from "../utils/i18n";
-import { V2NIMUser } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMUserService";
+import type { V2NIMUser } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMUserService";
 import { onMounted, getCurrentInstance } from "vue";
 import RootStore from "@xkit-yx/im-store-v2";
 import { useRouter } from "vue-router";

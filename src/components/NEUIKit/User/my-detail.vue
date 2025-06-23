@@ -133,7 +133,7 @@ import Icon from "../CommonComponents/Icon.vue";
 import NavBar from "../CommonComponents/NavBar.vue";
 import { t } from "../utils/i18n";
 import { autorun } from "mobx";
-import { V2NIMUser } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMUserService";
+import type { V2NIMUser } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMUserService";
 import RootStore from "@xkit-yx/im-store-v2";
 import { loading } from "../utils/loading";
 import { copyText } from "../utils";

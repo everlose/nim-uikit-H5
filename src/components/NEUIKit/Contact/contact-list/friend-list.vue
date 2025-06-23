@@ -33,7 +33,7 @@ import { friendGroupByPy } from "../../utils/friend";
 import Empty from "../../CommonComponents/Empty.vue";
 
 import { t } from "../../utils/i18n";
-import { V2NIMFriend } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMFriendService";
+import type { V2NIMFriend } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMFriendService";
 import RootStore from "@xkit-yx/im-store-v2";
 import { useRouter } from "vue-router";
 import { neUiKitRouterPath } from "../../utils/uikitRouter";

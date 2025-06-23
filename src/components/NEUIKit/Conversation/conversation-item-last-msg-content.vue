@@ -124,7 +124,7 @@ import { computed } from "vue";
 import Icon from "../CommonComponents/Icon.vue";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import { t } from "../utils/i18n";
-import { V2NIMLastMessage } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMConversationService";
+import type { V2NIMLastMessage } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMConversationService";
 import { EMOJI_ICON_MAP_CONFIG, emojiRegExp } from "../utils/emoji";
 const props = withDefaults(
   defineProps<{

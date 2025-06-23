@@ -91,7 +91,7 @@ import Appellation from "../../CommonComponents/Appellation.vue";
 import { t } from "../../utils/i18n";
 import { autorun } from "mobx";
 import { onUnmounted } from "vue";
-import { V2NIMTeam } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService";
+import type { V2NIMTeam } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService";
 import ForwardModal from "./message-forward-modal.vue";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import { onMounted } from "vue";

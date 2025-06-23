@@ -116,7 +116,7 @@ import Empty from "../CommonComponents/Empty.vue";
 import ConversationItem from "./conversation-item.vue";
 import { t } from "../utils/i18n";
 import { showToast } from "../utils/toast";
-import {
+import type {
   V2NIMConversationForUI,
   V2NIMLocalConversationForUI,
 } from "@xkit-yx/im-store-v2/dist/types/types";

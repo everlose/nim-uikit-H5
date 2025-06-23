@@ -374,7 +374,7 @@ import MessageText from "./message-text.vue";
 import MessageAudio from "./message-audio.vue";
 import MessageNotification from "./message-notification.vue";
 import MessageG2 from "./message-g2.vue";
-import { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import MessageIsRead from "./message-read.vue";
 import emitter from "../../utils/eventBus";

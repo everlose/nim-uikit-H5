@@ -27,7 +27,7 @@
 import { getAvatarBackgroundColor } from "../utils";
 import { autorun } from "mobx";
 import { ref, computed, onUnmounted, getCurrentInstance } from "vue";
-import { V2NIMUser } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMUserService";
+import type { V2NIMUser } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMUserService";
 import { useRouter } from "vue-router";
 import { neUiKitRouterPath } from "../utils/uikitRouter";
 
