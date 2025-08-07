@@ -11,6 +11,10 @@ export const trackInit = (
     component,
     imVersion: imPkg.version,
     platform: "H5",
+    os: "",
+    framework: "",
+    language: "Vue3",
+    container: "H5",
   });
   eventTracking.track("init", "");
 };
