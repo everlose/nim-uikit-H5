@@ -49,6 +49,10 @@ export interface AvatarProps {
    * 自定义样式
    */
   style?: React.CSSProperties
+  /**
+   * 消息内携带的昵称，用于头像文字兜底
+   */
+  nickFromMsg?: string
 }
 
 const Avatar: React.FC<AvatarProps> = ({
@@ -62,7 +66,8 @@ const Avatar: React.FC<AvatarProps> = ({
   onLongpress,
   onClick,
   className = '',
-  style = {}
+  style = {},
+  nickFromMsg = ''
 }) => {
   const navigate = useNavigate()
   const { store, nim } = useStateContext()
@@ -82,16 +87,13 @@ const Avatar: React.FC<AvatarProps> = ({
   const fontSizeValue = fontSize ? (typeof fontSize === 'number' ? fontSize : parseInt(fontSize)) : Math.floor(avatarSize / 3)
 
   const touchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const touchStartTimeRef = useRef<number>(0)
+  const touchStartPointRef = useRef<{ x: number; y: number } | null>(null)
 
   // 销毁组件时需要销毁定时器
   useEffect(() => {
     return () => {
       if (touchTimeoutRef.current) {
         clearTimeout(touchTimeoutRef.current)
-      }
-      if (touchStartTimeRef.current) {
-        clearTimeout(touchStartTimeRef.current)
       }
     }
   }, [])
@@ -104,10 +106,10 @@ const Avatar: React.FC<AvatarProps> = ({
       account,
       teamId,
       ignoreAlias: false,
-      nickFromMsg: ''
+      nickFromMsg
     })
 
-    return appellation ? appellation.slice(0, 2) : account.slice(0, 2)
+    return appellation ? appellation.slice(0, 2) : (nickFromMsg || account).slice(0, 2)
   }
 
   // 获取头像背景颜色
@@ -131,23 +133,41 @@ const Avatar: React.FC<AvatarProps> = ({
     }
   }
 
-  // 处理触摸开始
-  const handleTouchStart = () => {
-    touchStartTimeRef.current = Date.now()
+  const clearLongpressTimer = () => {
+    if (touchTimeoutRef.current) {
+      clearTimeout(touchTimeoutRef.current)
+      touchTimeoutRef.current = null
+    }
+  }
+
+  const startLongpressTimer = (x: number, y: number) => {
+    clearLongpressTimer()
+    touchStartPointRef.current = { x, y }
     touchTimeoutRef.current = setTimeout(() => {
       setIsLongPress(true)
-      if (onLongpress) {
-        onLongpress()
-      }
+      onLongpress?.()
     }, 500) // 长按阈值为500ms
   }
 
-  // 处理触摸结束
-  const handleTouchEnd = () => {
-    if (touchTimeoutRef.current) {
-      clearTimeout(touchTimeoutRef.current)
+  const cancelLongpressOnMove = (x: number, y: number) => {
+    const startPoint = touchStartPointRef.current
+    if (!startPoint) return
+    if (Math.abs(x - startPoint.x) > 8 || Math.abs(y - startPoint.y) > 8) {
+      clearLongpressTimer()
     }
+  }
 
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    startLongpressTimer(event.clientX, event.clientY)
+  }
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    cancelLongpressOnMove(event.clientX, event.clientY)
+  }
+
+  const handlePointerEnd = () => {
+    clearLongpressTimer()
     setTimeout(() => {
       setIsLongPress(false)
     }, 200)
@@ -162,9 +182,11 @@ const Avatar: React.FC<AvatarProps> = ({
         ...style
       }}
       onClick={handleAvatarClick}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerEnd}
+      onPointerLeave={handlePointerEnd}
     >
       {/* 使用遮罩层避免android长按头像会出现保存图片的弹窗 */}
       <div className="img-mask"></div>

@@ -16,25 +16,36 @@
   margin-right: 8px;
 }
 
+.msg-bg-image {
+  max-width: none;
+  padding: 0;
+  background: transparent;
+}
+
+.msg-bg-readonly-copy {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .msg-action-groups {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  max-width: 224px;
-  width: max-content;
+  display: grid;
+  grid-template-columns: repeat(var(--action-columns, 4), 56px);
+  row-gap: 10px;
+  width: calc(var(--action-columns, 4) * 56px);
 }
 
 .msg-action-groups-unknown {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(var(--action-columns, 2), 56px);
+  row-gap: 10px;
+  width: calc(var(--action-columns, 2) * 56px);
 }
 
 .msg-action-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-top: 10px;
   width: 56px;
 }
 
@@ -45,8 +56,16 @@
 
 .msg-action-btn-text {
   color: #000;
-  font-size: 14px;
-  word-break: keep-all;
+  font-size: 13px;
+  line-height: 100%;
+  text-align: center;
+  width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  hyphens: auto;
+  white-space: normal;
+  margin-top: 5px;
 }
 
 .msg-failed-wrapper {

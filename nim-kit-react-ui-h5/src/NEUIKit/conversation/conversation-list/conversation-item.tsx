@@ -2,12 +2,13 @@ import React, { useState } from 'react'
 import { observer } from 'mobx-react-lite'
 import dayjs from 'dayjs'
 import Avatar from '@/NEUIKit/common/components/Avatar'
+import AvatarWithStatus from '@/NEUIKit/common/components/AvatarWithStatus'
 import Appellation from '@/NEUIKit/common/components/Appellation'
 import Icon from '@/NEUIKit/common/components/Icon'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
-import type { V2NIMConversationForUI, V2NIMLocalConversationForUI } from '@xkit-yx/im-store-v2/dist/types/types'
+import type { V2NIMConversationForUI, V2NIMLocalConversationForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
 import ConversationItemRead from './conversation-item-read'
 import LastMsgContent from './conversation-item-last-msg-content'
 import './conversation-item.less'
@@ -183,7 +184,11 @@ const ConversationItem: React.FC<ConversationItemProps> = observer(
         <div className="conversation-item-content">
           <div className="conversation-item-left">
             {unread && <div className="unread">{isMute ? <div className="dot"></div> : <div className="badge">{unread}</div>}</div>}
-            <Avatar account={to} avatar={teamAvatar} />
+            {conversation.type === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P ? (
+              <AvatarWithStatus account={to} />
+            ) : (
+              <Avatar account={to} avatar={teamAvatar} />
+            )}
           </div>
 
           <div className="conversation-item-right">

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from '../../hooks/useTranslate'
+import Icon from '../Icon'
 import './index.less'
 
 export interface BottomPopupProps {
@@ -24,6 +25,10 @@ export interface BottomPopupProps {
    * 自定义类名
    */
   className?: string
+  /**
+   * 标题
+   */
+  title?: React.ReactNode
   /**
    * 确认按钮点击事件
    */
@@ -51,6 +56,7 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
   showCancel = true,
   showConfirm = true,
   className = '',
+  title,
   onConfirm,
   onCancel,
   onClose,
@@ -110,15 +116,17 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
         {showHeader && (
           <div className="nim-popup-header">
             {showCancel && (
-              <div className="nim-cancel-btn" onClick={handleCancel}>
-                {t('cancelText') || '取消'}
-              </div>
+              <button className="nim-cancel-btn" type="button" onClick={handleCancel} aria-label={t('cancelText') || '取消'}>
+                <Icon type="icon-jiantou" size={18} />
+              </button>
             )}
+            {title && <div className="nim-popup-title">{title}</div>}
             {showConfirm && (
               <div className="nim-confirm-btn" onClick={handleConfirm}>
                 {t('okText') || '确定'}
               </div>
             )}
+            {!showConfirm && <div className="nim-popup-header-placeholder"></div>}
           </div>
         )}
         <div className="nim-popup-body">{children}</div>

@@ -10,6 +10,8 @@ const translate = (key: string): string => {
       videoMsgText: t('videoMsgText'),
       fileMsgText: t('fileMsgText'),
       callMsgText: t('callMsgText'),
+      voiceCallText: t('voiceCallText'),
+      videoCallText: t('videoCallText'),
       geoMsgText: t('geoMsgText'),
       imgMsgText: t('imgMsgText'),
       notiMsgText: t('notiMsgText'),
@@ -31,8 +33,8 @@ const translate = (key: string): string => {
  * @param msg 消息对象，包含消息类型和文本
  * @returns 根据消息类型返回的提示内容
  */
-export const getMsgContentTipByType = (msg: { messageType?: V2NIMConst.V2NIMMessageType; text?: string }): string => {
-  const { messageType, text } = msg
+export const getMsgContentTipByType = (msg: { messageType?: V2NIMConst.V2NIMMessageType; text?: string; attachment?: any }): string => {
+  const { messageType, text, attachment } = msg
   switch (messageType) {
     case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT:
       // 对于文本消息，直接返回文本内容或默认翻译文本
@@ -51,7 +53,7 @@ export const getMsgContentTipByType = (msg: { messageType?: V2NIMConst.V2NIMMess
       return translate('audioMsgText')
     case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CALL:
       // 返回通话消息的翻译提示文本
-      return translate('callMsgText')
+      return attachment?.type == 1 ? translate('voiceCallText') : translate('videoCallText')
     case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION:
       // 返回位置消息的翻译提示文本
       return translate('geoMsgText')

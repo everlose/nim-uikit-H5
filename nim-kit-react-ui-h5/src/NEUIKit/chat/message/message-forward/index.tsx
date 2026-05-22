@@ -9,18 +9,25 @@ import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { toast } from '@/NEUIKit/common/utils/toast'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
 import type { V2NIMTeam } from 'nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService'
+import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
+import { sendMergedForwardMessage } from '../merged-forward/utils'
 import './index.less'
 
 interface MessageForwardProps {
   visible: boolean
   msgIdClient: string // 转发的消息ID
   onClose: () => void
+  conversationId?: string
+  msg?: V2NIMMessageForUI
+  msgs?: V2NIMMessageForUI[]
+  forwardMode?: 'normal' | 'oneByOne' | 'merge'
+  onForwardSuccess?: () => void
 }
 
 /**
  * 消息转发组件
  */
-const MessageForward: React.FC<MessageForwardProps> = observer(({ visible, msgIdClient, onClose }) => {
+const MessageForward: React.FC<MessageForwardProps> = observer(({ visible, msgIdClient, onClose, conversationId: propConversationId, msg: propMsg, msgs: propMsgs, forwardMode, onForwardSuccess }) => {
   const { t } = useTranslation()
   const { store, nim } = useStateContext()
 
@@ -41,9 +48,12 @@ const MessageForward: React.FC<MessageForwardProps> = observer(({ visible, msgId
     V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P
   )
   const [forwardToTeamInfo, setForwardToTeamInfo] = useState<V2NIMTeam>()
+  const forwardMsgs = propMsgs?.length ? propMsgs : forwardMsg ? [forwardMsg] : []
+  const isMergeForward = forwardMode === 'merge'
+  const isOneByOneForward = forwardMode === 'oneByOne' || (!!propMsgs?.length && !isMergeForward)
 
   // 获取当前会话ID
-  const conversationId = store.uiStore.selectedConversation
+  const conversationId = propConversationId || store.uiStore.selectedConversation
 
   // 监听好友列表
   useEffect(() => {
@@ -72,9 +82,9 @@ const MessageForward: React.FC<MessageForwardProps> = observer(({ visible, msgId
     setSelectedId(_forwardTo)
     setForwardConversationType(conversationType)
 
-    if (_forwardTo && msgIdClient) {
+    if (_forwardTo && (msgIdClient || propMsgs?.length)) {
       setForwardTo(_forwardTo)
-      const msg = store.msgStore.getMsg(conversationId, [msgIdClient])?.[0]
+      const msg = propMsgs?.[0] || propMsg || store.msgStore.getMsg(conversationId, [msgIdClient])?.[0]
       setForwardMsg(msg)
 
       setForwardModalVisible(true)
@@ -95,7 +105,7 @@ const MessageForward: React.FC<MessageForwardProps> = observer(({ visible, msgId
   const handleForwardConfirm = (forwardComment: string) => {
     setForwardModalVisible(false)
 
-    if (!forwardMsg) {
+    if (!forwardMsgs.length) {
       toast.info(t('getForwardMessageFailed'))
       return
     }
@@ -104,10 +114,23 @@ const MessageForward: React.FC<MessageForwardProps> = observer(({ visible, msgId
 
     const forwardConversationId = nim.V2NIMConversationIdUtil[methodName](forwardTo)
 
-    store.msgStore
-      .forwardMsgActive(forwardMsg, forwardConversationId, forwardComment)
+    const forwardPromise = isMergeForward
+      ? sendMergedForwardMessage({
+          store,
+          nim,
+          msgs: forwardMsgs,
+          conversationId: forwardConversationId,
+          sourceConversationId: conversationId,
+          appVersion: process.env.APP_VERSION || '',
+          chatHistoryText: t('chatHistoryText'),
+          comment: forwardComment
+        })
+      : Promise.all(forwardMsgs.map((msg) => store.msgStore.forwardMsgActive(msg, forwardConversationId, forwardComment)))
+
+    Promise.resolve(forwardPromise)
       .then(() => {
         toast.info(t('forwardSuccessText'))
+        onForwardSuccess?.()
       })
       .catch(() => {
         toast.info(t('forwardFailedText'))
@@ -179,8 +202,11 @@ const MessageForward: React.FC<MessageForwardProps> = observer(({ visible, msgId
         forwardModalVisible={forwardModalVisible}
         forwardTo={forwardTo}
         forwardMsg={forwardMsg}
+        sourceConversationId={conversationId}
         forwardConversationType={forwardConversationType}
         forwardToTeamInfo={forwardToTeamInfo}
+        isOneByOneForward={isOneByOneForward}
+        isMergeForward={isMergeForward}
         onConfirm={handleForwardConfirm}
         onCancel={handleForwardCancel}
       />

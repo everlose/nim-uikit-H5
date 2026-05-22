@@ -8,6 +8,14 @@
   flex-direction: column;
   position: relative;
 
+  // 在线状态文字样式（在 NavBar 中通过 iconContent 传入）
+  .nav-status-text {
+    flex-shrink: 0;  // 不被压缩
+    white-space: nowrap;  // 不换行
+    font-weight: 500;
+    font-size: 16px;
+  }
+
   .msg-alert {
     display: flex;
     flex-direction: column;
@@ -39,5 +47,82 @@
 
   .msg-wrapper > message-list {
     height: 100%;
+  }
+
+  .msg-anchor-latest {
+    position: fixed;
+    right: 18px;
+    bottom: 86px;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    transform: rotate(90deg);
+  }
+
+  .msg-anchor-loading {
+    animation: anchorLoading 1s infinite linear;
+  }
+
+  .msg-nav-cancel {
+    color: #333;
+    font-size: 16px;
+    line-height: 24px;
+    padding: 0 4px;
+  }
+
+  .msg-multi-action-bar {
+    height: 92px;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    background: #f4f6f8;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    border-top: 1px solid #edf0f3;
+  }
+
+  .msg-multi-action {
+    flex: 1;
+    height: 72px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: #333;
+    font-size: 13px;
+  }
+
+  .msg-multi-action.disabled {
+    color: #b3b7bc;
+  }
+
+  .msg-multi-action-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .msg-multi-action.disabled .msg-multi-action-icon {
+    opacity: 0.55;
+  }
+}
+
+@keyframes anchorLoading {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }

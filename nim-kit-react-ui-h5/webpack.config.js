@@ -1,11 +1,30 @@
 const path = require('path')
+const fs = require('fs')
 const HtmlWebpackPlugin = require('html-webpack-plugin')
 const MiniCssExtractPlugin = require('mini-css-extract-plugin')
 const TerserPlugin = require('terser-webpack-plugin')
 const CssMinimizerPlugin = require('css-minimizer-webpack-plugin')
+const Dotenv = require('dotenv-webpack')
 
 module.exports = (env, argv) => {
   const isDevelopment = argv.mode === 'development'
+  const isServe = process.env.WEBPACK_SERVE === 'true'
+  
+  // 根据 --env envFile 参数决定加载哪个配置文件
+  // envFile=local      → .env.local      (npm run dev)
+  // envFile=production → .env.production (npm run start / npm run build)
+  const envFile = env?.envFile === 'local' ? './.env.local' : './.env.production'
+
+  // 检查配置文件是否存在
+  const envFilePath = path.resolve(__dirname, envFile)
+  if (!fs.existsSync(envFilePath)) {
+    const fileName = env?.envFile === 'local' ? '.env.local' : '.env.production'
+    console.error(`\n\x1b[31m[Error] ${fileName} 文件不存在！\x1b[0m`)
+    console.error('\x1b[33m请执行以下步骤创建配置：\x1b[0m')
+    console.error(`  1. cp .env.example ${fileName}`)
+    console.error(`  2. 编辑 ${fileName} 填入 NIM_APP_KEY\n`)
+    process.exit(1)
+  }
 
   return {
     mode: isDevelopment ? 'development' : 'production',
@@ -16,7 +35,8 @@ module.exports = (env, argv) => {
       filename: isDevelopment ? '[name].js' : '[name].[contenthash].js',
       chunkFilename: isDevelopment ? '[name].chunk.js' : '[name].[contenthash].chunk.js',
       clean: true,
-      publicPath: '/',
+      // devServer 使用 '/'，打包构建使用 './'
+      publicPath: isServe ? '/' : './',
     },
 
     resolve: {
@@ -91,6 +111,14 @@ module.exports = (env, argv) => {
     },
 
     plugins: [
+      // 环境变量配置
+      // - npm run dev:   加载 .env.local (本地开发配置)
+      // - npm run start: 加载 .env      (线上配置预览)
+      // - npm run build: 加载 .env      (线上部署)
+      new Dotenv({
+        path: envFile,
+        systemvars: true,
+      }),
       new HtmlWebpackPlugin({
         template: './public/index.html',
         inject: 'body',

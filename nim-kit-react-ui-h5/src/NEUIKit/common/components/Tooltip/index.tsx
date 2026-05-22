@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react'
 import './index.less'
 
 export interface TooltipProps {
@@ -32,11 +32,19 @@ export interface TooltipProps {
 }
 
 /**
+ * Tooltip 组件对外暴露的方法
+ */
+export interface TooltipRef {
+  close: () => void
+}
+
+/**
  * 工具提示组件
  */
-const Tooltip: React.FC<TooltipProps> = ({ content, color = '#303133', visible: propVisible = false, align = false, onVisibleChange, children }) => {
+const Tooltip = forwardRef<TooltipRef, TooltipProps>(({ content, color = '#303133', visible: propVisible = false, align = false, onVisibleChange, children }, ref) => {
   // 状态
   const [isShow, setIsShow] = useState(propVisible)
+  const [popperRendered, setPopperRendered] = useState(propVisible)
   const [style, setStyle] = useState<React.CSSProperties>({})
   const [placement, setPlacement] = useState<'top' | 'bottom'>('top')
 
@@ -46,8 +54,17 @@ const Tooltip: React.FC<TooltipProps> = ({ content, color = '#303133', visible: 
   const touchTimerRef = useRef<NodeJS.Timeout | null>(null)
   const touchStartPositionRef = useRef<{ x: number; y: number } | null>(null)
 
+  // 暴露 close 方法给外部使用
+  useImperativeHandle(ref, () => ({
+    close: () => {
+      setIsShow(false)
+      setPopperRendered(false)
+    }
+  }))
+
   // 同步外部visible属性
   useEffect(() => {
+    setPopperRendered(propVisible)
     setIsShow(propVisible)
   }, [propVisible])
 
@@ -60,6 +77,7 @@ const Tooltip: React.FC<TooltipProps> = ({ content, color = '#303133', visible: 
   useEffect(() => {
     const handleGlobalClick = () => {
       setIsShow(false)
+      setPopperRendered(false)
     }
 
     window.addEventListener('click', handleGlobalClick)
@@ -71,77 +89,46 @@ const Tooltip: React.FC<TooltipProps> = ({ content, color = '#303133', visible: 
 
   // 计算tooltip位置
   const getPosition = () => {
-    return new Promise<void>((resolve) => {
+    return new Promise<boolean>((resolve) => {
       const tooltipContent = contentRef.current
       const tooltipPopper = popperRef.current
 
+      if (!tooltipContent || !tooltipPopper) {
+        resolve(false)
+        return
+      }
+
       if (tooltipContent && tooltipPopper) {
-        const contentRect = tooltipContent.getBoundingClientRect()
         const popperRect = tooltipPopper.getBoundingClientRect()
-        const { top, width, height, left } = contentRect
+        const contentRect = tooltipContent.getBoundingClientRect()
         const windowWidth = window.innerWidth
+        const windowHeight = window.innerHeight
+        const margin = 10
+        const gap = 8
+        const touchPoint = touchStartPositionRef.current
+        const anchorX = touchPoint?.x || contentRect.left + contentRect.width / 2
+        const anchorY = touchPoint?.y || contentRect.top + contentRect.height / 2
+        const popperWidth = popperRect.width
+        const popperHeight = popperRect.height
+        const hasEnoughSpaceAbove = anchorY - popperHeight - gap >= margin
+        const hasEnoughSpaceBelow = anchorY + popperHeight + gap <= windowHeight - margin
         let newStyle: React.CSSProperties = {}
 
-        // 判断是否显示在顶部还是底部
-        if (top <= 300) {
+        if (!hasEnoughSpaceAbove && hasEnoughSpaceBelow) {
           setPlacement('bottom')
         } else {
           setPlacement('top')
         }
 
-        if (placement === 'top') {
-          if (align) {
-            // 计算左侧位置，确保不超出屏幕
-            let leftPos = -100
-            if (width < 90) {
-              leftPos = -200
-            }
-            // 检查是否会超出屏幕左侧
-            if (left + leftPos < 0) {
-              leftPos = -left + 10 // 留10px边距
-            }
-            // 检查是否会超出屏幕右侧
-            if (left + leftPos + popperRect.width > windowWidth) {
-              leftPos = windowWidth - left - popperRect.width - 10
-            }
-            newStyle.left = `${leftPos}px`
-          } else {
-            let leftPos = 50
-            // 检查是否会超出屏幕右侧
-            if (left + leftPos + popperRect.width > windowWidth) {
-              leftPos = windowWidth - left - popperRect.width - 10
-            }
-            newStyle.left = `${leftPos}px`
-          }
-          newStyle.bottom = `${height + 8}px`
+        if (hasEnoughSpaceAbove || !hasEnoughSpaceBelow) {
+          newStyle.top = `${Math.max(margin, anchorY - popperHeight - gap)}px`
         } else {
-          if (align) {
-            let leftPos = -100
-            if (width < 100) {
-              leftPos = -200
-            }
-            // 检查是否会超出屏幕左侧
-            if (left + leftPos < 0) {
-              leftPos = -left + 10
-            }
-            // 检查是否会超出屏幕右侧
-            if (left + leftPos + popperRect.width > windowWidth) {
-              leftPos = windowWidth - left - popperRect.width - 10
-            }
-            newStyle.left = `${leftPos}px`
-          } else {
-            let leftPos = 50
-            // 检查是否会超出屏幕右侧
-            if (left + leftPos + popperRect.width > windowWidth) {
-              leftPos = windowWidth - left - popperRect.width - 10
-            }
-            newStyle.left = `${leftPos}px`
-          }
-          newStyle.top = `${height + 8}px`
+          newStyle.top = `${Math.min(windowHeight - popperHeight - margin, anchorY + gap)}px`
         }
+        newStyle.left = `${Math.min(windowWidth - popperWidth - margin, Math.max(margin, anchorX - popperWidth / 2))}px`
 
         setStyle(newStyle)
-        resolve()
+        resolve(true)
       }
     })
   }
@@ -149,9 +136,18 @@ const Tooltip: React.FC<TooltipProps> = ({ content, color = '#303133', visible: 
   // 处理点击
   const handleClick = async () => {
     if (isShow) {
+      setPopperRendered(false)
       return setIsShow(false)
     }
-    await getPosition()
+    setPopperRendered(true)
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve())
+    })
+    const positioned = await getPosition()
+    if (!positioned) {
+      setPopperRendered(false)
+      return
+    }
     setIsShow(true)
   }
 
@@ -194,6 +190,7 @@ const Tooltip: React.FC<TooltipProps> = ({ content, color = '#303133', visible: 
   const close = (e: React.TouchEvent) => {
     e.stopPropagation()
     setIsShow(false)
+    setPopperRendered(false)
   }
 
   // 阻止冒泡
@@ -221,12 +218,14 @@ const Tooltip: React.FC<TooltipProps> = ({ content, color = '#303133', visible: 
 
         {isShow && <div className="nim-tooltip-mask" onTouchStart={close}></div>}
 
-        <div ref={popperRef} className="nim-tooltip-popper" onClick={stopPropagation} style={popperStyle}>
-          {content}
-        </div>
+        {popperRendered && (
+          <div ref={popperRef} className="nim-tooltip-popper" onClick={stopPropagation} style={popperStyle}>
+            {content}
+          </div>
+        )}
       </div>
     </div>
   )
-}
+})
 
 export default Tooltip

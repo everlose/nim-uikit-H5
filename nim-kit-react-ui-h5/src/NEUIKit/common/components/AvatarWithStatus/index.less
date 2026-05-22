@@ -1,0 +1,23 @@
+.avatar-with-status {
+  position: relative;
+  display: inline-block;
+
+  .status-dot {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-sizing: border-box;
+
+    &.online {
+      background-color: #00b853;
+    }
+
+    &.offline {
+      background-color: #cccccc;
+    }
+  }
+}

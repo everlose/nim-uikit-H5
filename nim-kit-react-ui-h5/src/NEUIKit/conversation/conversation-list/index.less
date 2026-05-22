@@ -1,10 +1,12 @@
 .nim-conversation-wrapper {
   height: 100%;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background-color: #fff;
 
   .navigation-bar {
-    position: fixed;
+    flex: 0 0 60px;
     height: 60px;
     border-bottom: 1px solid #e9eff5;
     padding-left: 20px;
@@ -13,6 +15,7 @@
     justify-content: space-between;
     background-color: #fff;
     width: 100%;
+    box-sizing: border-box;
     opacity: 1;
     z-index: 999;
   }
@@ -29,12 +32,6 @@
       height: 32px;
       margin-right: 10px;
     }
-  }
-
-  .block {
-    height: 60px;
-    width: 100%;
-    display: block;
   }
 
   .conversation-search {
@@ -84,7 +81,8 @@
   }
 
   .conversation-list-wrapper {
-    height: calc(100% - 120px);
+    flex: 1;
+    min-height: 0;
     box-sizing: border-box;
     width: 100%;
     overflow-y: auto;

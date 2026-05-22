@@ -122,6 +122,17 @@ npm install
 yarn install
 ```
 
+## 环境配置
+
+启动或构建前，需要从 `.env.example` 复制出本地开发和生产环境配置文件：
+
+```bash
+cp .env.example .env.local
+cp .env.example .env.production
+```
+
+按实际环境填写 `.env.local` 和 `.env.production` 中的配置项。
+
 ## 启动项目
 
 ### 开发模式
@@ -274,3 +285,10 @@ https://github.com/netease-kit/nim-uikit-H5
 ## 许可证
 
 私有项目
+
+
+## 发布测服
+
+工程: https://g.hz.netease.com/yunxin-app/app-static-web
+分支: test
+ndp: https://ndp.netease.com/index-new#/app/list?productId=507560&appId=877978

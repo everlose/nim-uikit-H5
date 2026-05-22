@@ -1,4 +1,5 @@
 import React from 'react'
+import { createPortal } from 'react-dom'
 import './index.less'
 
 export interface ModalProps {
@@ -29,6 +30,10 @@ export interface ModalProps {
    */
   onCancel?: () => void
   /**
+   * 是否展示底部按钮
+   */
+  showFooter?: boolean
+  /**
    * 对话框内容
    */
   children?: React.ReactNode
@@ -37,7 +42,7 @@ export interface ModalProps {
 /**
  * 模态对话框组件
  */
-const Modal: React.FC<ModalProps> = ({ title, confirmText = '确定', cancelText = '取消', visible, onConfirm, onCancel, children }) => {
+const Modal: React.FC<ModalProps> = ({ title, confirmText = '确定', cancelText = '取消', visible, onConfirm, onCancel, showFooter = true, children }) => {
   // 如果不可见，则不渲染
   if (!visible) {
     return null
@@ -63,7 +68,7 @@ const Modal: React.FC<ModalProps> = ({ title, confirmText = '确定', cancelText
     evt.stopPropagation()
   }
 
-  return (
+  return createPortal(
     <div className="nim-modal">
       <div className="nim-mask" onClick={handleMaskClick}></div>
       <div className="nim-content">
@@ -71,16 +76,19 @@ const Modal: React.FC<ModalProps> = ({ title, confirmText = '确定', cancelText
         <div className="nim-slot-content" onClick={handleContentClick}>
           {children}
         </div>
-        <div className="nim-buttons">
-          <div className="nim-button nim-cancel" onClick={handleCancelClick}>
-            {cancelText}
+        {showFooter && (
+          <div className="nim-buttons">
+            <div className="nim-button nim-cancel" onClick={handleCancelClick}>
+              {cancelText}
+            </div>
+            <div className="nim-button nim-confirm" onClick={handleConfirmClick}>
+              {confirmText}
+            </div>
           </div>
-          <div className="nim-button nim-confirm" onClick={handleConfirmClick}>
-            {confirmText}
-          </div>
-        </div>
+        )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

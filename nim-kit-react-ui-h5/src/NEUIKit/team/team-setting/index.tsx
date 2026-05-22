@@ -93,6 +93,10 @@ const TeamSetting: React.FC = observer(() => {
     })
   }, [teamId])
 
+  const gotoPinList = useCallback(() => {
+    navigate(`${neUiKitRouterPath.pinList}?conversationId=${conversationId}`)
+  }, [conversationId])
+
   // 解散群确认
   const showDismissConfirm = useCallback(() => {
     modal.confirm({
@@ -271,6 +275,10 @@ const TeamSetting: React.FC = observer(() => {
             </div>
             <div className="team-set-item team-set-item-flex" onClick={goNickInTeam}>
               <div>{t('nickInTeam')}</div>
+              <Icon iconClassName="more-icon" style={{ color: '#999' }} type="icon-jiantou" />
+            </div>
+            <div className="team-set-item team-set-item-flex" onClick={gotoPinList}>
+              <div>{t('pinText')}</div>
               <Icon iconClassName="more-icon" style={{ color: '#999' }} type="icon-jiantou" />
             </div>
           </div>

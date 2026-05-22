@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { observer } from 'mobx-react-lite'
-import { useNavigate } from '@/utils/router'
+import { autorun } from 'mobx'
+import { useLocation, useNavigate } from '@/utils/router'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
-import { HISTORY_LIMIT, events } from '@/NEUIKit/common/utils/constants'
+import { events } from '@/NEUIKit/common/utils/constants'
 import { showModal } from '@/NEUIKit/common/utils/modal'
-import { showToast } from '@/NEUIKit/common/utils/toast'
+import { showToast, toast } from '@/NEUIKit/common/utils/toast'
 import { neUiKitRouterPath } from '@/NEUIKit/common/utils/uikitRouter'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
 import emitter from '@/NEUIKit/common/utils/eventBus'
@@ -15,10 +16,16 @@ import NavBar from './message/nav-bar'
 import Icon from '@/NEUIKit/common/components/Icon'
 import MessageList from './message/message-list'
 import MessageInput from './message/message-input'
+import MessageForward from './message/message-forward'
 import { useEventTracking } from '../common/hooks/useEventTracking'
+import { checkUserOnline } from '../common/utils/userStatus'
+import { getVoiceTextMap, setVoiceText as setCachedVoiceText } from './voiceTextCache'
+import { useChatMessageLoader } from './hooks/useChatMessageLoader'
+import { chunkMessages, getMessageSelectKey, isForwardableMessage, isSelectableMessage, MULTI_DELETE_BATCH_SIZE, MULTI_FORWARD_LIMIT, syncConversationLastMessageAfterDelete } from './message/message-multi-select/utils'
+import { isMergeForwardableMessage, MERGED_FORWARD_LIMIT } from './message/merged-forward/utils'
+import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
 
 import './index.less'
-import { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/types'
 
 // 回复消息类型
 interface YxReplyMsg {
@@ -37,27 +44,47 @@ interface YxReplyMsg {
 const Chat = observer(() => {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
   const { store, nim } = useStateContext()
+  const query = new URLSearchParams(location.search)
+  const queryConversationId = query.get('conversationId') || ''
+  const anchorMessageClientId = query.get('anchorMessageClientId') || ''
+  const selectedConversation = store.uiStore.selectedConversation as string
+  const lastConversationIdRef = useRef(queryConversationId || selectedConversation || '')
 
   const [title, setTitle] = useState('')
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [noMore, setNoMore] = useState(false)
+  const [statusText, setStatusText] = useState('')  // P2P 会话的在线状态文字
   const [replyMsgsMap, setReplyMsgsMap] = useState<Record<string, any>>({})
-
-  // 记录组件是否已挂载
-  const isMountedRef = useRef(false)
+  const [isMultiSelecting, setIsMultiSelecting] = useState(false)
+  const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([])
+  const [multiForwardMsgs, setMultiForwardMsgs] = useState<V2NIMMessageForUI[]>([])
+  const [multiForwardMode, setMultiForwardMode] = useState<'oneByOne' | 'merge'>('oneByOne')
+  const initialScrollKeyRef = useRef('')
 
   // 会话ID
-  const conversationId = store.uiStore.selectedConversation as string
+  const currentConversationId = queryConversationId || selectedConversation
+  if (currentConversationId) {
+    lastConversationIdRef.current = currentConversationId
+  }
+  const conversationId = currentConversationId || lastConversationIdRef.current
+
+  // 语音转文字结果存储 Map<messageClientId, text>，进入会话列表前保留在内存中
+  const [voiceTextMap, setVoiceTextMap] = useState<Map<string, string>>(() => getVoiceTextMap(conversationId))
+
+  /**
+   * 设置语音转文字结果
+   */
+  const setVoiceText = (messageClientId: string, text: string) => {
+    setVoiceTextMap(setCachedVoiceText(conversationId, messageClientId, text))
+  }
 
   // 会话类型
-  const conversationType = nim.V2NIMConversationIdUtil.parseConversationType(conversationId) as unknown as V2NIMConst.V2NIMConversationType
+  const conversationType = conversationId
+    ? (nim.V2NIMConversationIdUtil.parseConversationType(conversationId) as unknown as V2NIMConst.V2NIMConversationType)
+    : V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_UNKNOWN
 
   // 对话方
-  const to = nim.V2NIMConversationIdUtil.parseConversationTargetId(conversationId)
-
-  // 消息体
-  const [msgs, setMsgs] = useState<V2NIMMessageForUI[]>([])
+  const to = conversationId ? nim.V2NIMConversationIdUtil.parseConversationTargetId(conversationId) : ''
 
   // 是否需要显示群组消息已读未读，默认 false
   const teamManagerVisible = store.localOptions.teamMsgReceiptVisible
@@ -69,6 +96,12 @@ const Chat = observer(() => {
   useEventTracking({
     component: 'ChatUIKit'
   })
+
+  useEffect(() => {
+    if (queryConversationId && queryConversationId !== store.uiStore.selectedConversation) {
+      store.uiStore.selectConversation(queryConversationId)
+    }
+  }, [queryConversationId])
 
   /**
    * 返回会话列表
@@ -94,6 +127,129 @@ const Chat = observer(() => {
         search: `?teamId=${to}`
       })
     }
+  }
+
+  const exitMultiSelect = () => {
+    setIsMultiSelecting(false)
+    setSelectedMessageIds([])
+    setMultiForwardMsgs([])
+  }
+
+  const enterMultiSelect = (msg: V2NIMMessageForUI) => {
+    if (!isSelectableMessage(msg)) return
+    setIsMultiSelecting(true)
+    setSelectedMessageIds([getMessageSelectKey(msg)])
+    emitter.emit(events.CLOSE_PANEL)
+  }
+
+  const toggleSelectMessage = (msg: V2NIMMessageForUI) => {
+    if (!isSelectableMessage(msg)) return
+    const selectKey = getMessageSelectKey(msg)
+    setSelectedMessageIds((ids) => (ids.includes(selectKey) ? ids.filter((id) => id !== selectKey) : [...ids, selectKey]))
+  }
+
+  const openMultiForward = (forwardMsgs: V2NIMMessageForUI[]) => {
+    setMultiForwardMode('oneByOne')
+    setMultiForwardMsgs(forwardMsgs)
+  }
+
+  const openMergeForward = (forwardMsgs: V2NIMMessageForUI[]) => {
+    setMultiForwardMode('merge')
+    setMultiForwardMsgs(forwardMsgs)
+  }
+
+  const syncSelectedMessages = (msgs: V2NIMMessageForUI[]) => {
+    setSelectedMessageIds(msgs.map(getMessageSelectKey).filter(Boolean))
+  }
+
+  const handleMultiForward = () => {
+    if (!selectedMessages.length) {
+      return
+    }
+
+    if (store.connectStore.loginStatus !== V2NIMConst.V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINED) {
+      toast.info(t('networkError'))
+      return
+    }
+
+    if (selectedMessages.length > MULTI_FORWARD_LIMIT) {
+      showToast({
+        message: t('oneByOneForwardLimitText'),
+        type: 'info',
+        duration: 1000
+      })
+      return
+    }
+
+    const forwardableMsgs = selectedMessages.filter((msg) => isForwardableMessage(store, msg))
+    if (forwardableMsgs.length !== selectedMessages.length) {
+      showModal({
+        title: t('forwardExceptionTitle'),
+        content: t('forwardExceptionContent'),
+        confirmText: t('okText'),
+        cancelText: t('cancelText'),
+        onConfirm: () => {
+          syncSelectedMessages(forwardableMsgs)
+          if (forwardableMsgs.length) {
+            openMultiForward(forwardableMsgs)
+          } else {
+            showToast({
+              message: t('noForwardableMsgText'),
+              type: 'info',
+              duration: 1000
+            })
+          }
+        }
+      })
+      return
+    }
+
+    openMultiForward(forwardableMsgs)
+  }
+
+  const handleMergeForward = () => {
+    if (!selectedMessages.length) {
+      return
+    }
+
+    if (store.connectStore.loginStatus !== V2NIMConst.V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINED) {
+      toast.info(t('networkError'))
+      return
+    }
+
+    if (selectedMessages.length > MERGED_FORWARD_LIMIT) {
+      showToast({
+        message: t('mergeForwardLimitText'),
+        type: 'info',
+        duration: 1000
+      })
+      return
+    }
+
+    const forwardableMsgs = selectedMessages.filter((msg) => isMergeForwardableMessage(store, msg))
+    if (forwardableMsgs.length !== selectedMessages.length) {
+      showModal({
+        title: t('forwardExceptionTitle'),
+        content: t('forwardExceptionContent'),
+        confirmText: t('okText'),
+        cancelText: t('cancelText'),
+        onConfirm: () => {
+          syncSelectedMessages(forwardableMsgs)
+          if (forwardableMsgs.length) {
+            openMergeForward(forwardableMsgs)
+          } else {
+            showToast({
+              message: t('noForwardableMsgText'),
+              type: 'info',
+              duration: 1000
+            })
+          }
+        }
+      })
+      return
+    }
+
+    openMergeForward(forwardableMsgs)
   }
 
   /**
@@ -135,10 +291,12 @@ const Chat = observer(() => {
     if (messages.length && !messages[0]?.isSelf && messages[0].conversationId === conversationId && pathname === neUiKitRouterPath.chat) {
       handleMsgReceipt(messages)
     }
-    // 加个宏任务, 因为事件先触发后, msgs 自身才更新
-    setTimeout(() => {
-      emitter.emit(events.ON_SCROLL_BOTTOM)
-    }, 0)
+    if (handleIncomingMessages(messages)) {
+      // 加个宏任务, 因为事件先触发后, msgs 自身才更新
+      setTimeout(() => {
+        emitter.emit(events.ON_SCROLL_BOTTOM)
+      }, 0)
+    }
   }
 
   /**
@@ -155,7 +313,7 @@ const Chat = observer(() => {
   /**
    * 处理历史消息的已读未读
    */
-  const handleHistoryMsgReceipt = (messages: any[]) => {
+  const handleHistoryMsgReceipt = async (messages: any[]) => {
     // 如果是单聊
     if (conversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P && p2pMsgReceiptVisible) {
       const myUserAccountId = nim.V2NIMLoginService.getLoginUser()
@@ -165,7 +323,7 @@ const Chat = observer(() => {
 
       // 发送单聊消息已读回执
       if (othersMsgs.length > 0) {
-        store.msgStore.sendMsgReceiptActive(othersMsgs[0])
+        await store.msgStore.sendMsgReceiptActive(othersMsgs[0])
       }
     }
     // 如果是群聊
@@ -175,7 +333,7 @@ const Chat = observer(() => {
         .filter((item) => !['beReCallMsg', 'reCallMsg'].includes(item.recallType || ''))
         .filter((item) => item.senderId === myUserAccountId)
 
-      store.msgStore.getTeamMsgReadsActive(myMsgs, conversationId)
+      await store.msgStore.getTeamMsgReadsActive(myMsgs, conversationId)
 
       // 发送群消息已读回执
       // sdk 要求 一次最多传入 50 个消息对象
@@ -184,123 +342,132 @@ const Chat = observer(() => {
         .filter((item) => item.senderId !== myUserAccountId)
 
       if (othersMsgs.length > 0 && othersMsgs.length < 50) {
-        store.msgStore.sendTeamMsgReceiptActive(othersMsgs)
+        await store.msgStore.sendTeamMsgReceiptActive(othersMsgs)
       }
     }
   }
 
-  /**
-   * 拉取历史消息
-   */
-  const getHistory = async (endTime: number, lastMsgId?: string) => {
-    try {
-      if (noMore) {
-        return []
-      }
-      if (loadingMore) {
-        return []
-      }
+  const {
+    msgs,
+    loadingOlder,
+    loadingNewer,
+    hasOlder,
+    hasNewer,
+    anchorMode,
+    showLatestHint,
+    loadOlder,
+    loadNewer,
+    switchToLatest,
+    handleIncomingMessages
+  } = useChatMessageLoader({
+    conversationId,
+    anchorMessageClientId,
+    loginStatus: store.connectStore.loginStatus,
+    store,
+    nim,
+    onHistoryMessagesLoaded: handleHistoryMsgReceipt,
+    onError: (err) => {
+      showToast({
+        message: t('getHistoryFailedText'),
+        type: 'error',
+        duration: 1000
+      })
+      console.error('Get history message failed', err.toString())
+    }
+  })
 
-      setLoadingMore(true)
+  const selectedMessageIdSet = new Set(selectedMessageIds)
+  const selectedMessages = msgs.filter((msg) => selectedMessageIdSet.has(getMessageSelectKey(msg)))
 
-      if (conversationId) {
-        const historyMsgs = await store.msgStore.getHistoryMsgActive({
-          conversationId,
-          endTime,
-          lastMsgId,
-          limit: HISTORY_LIMIT
-        })
+  const handleMultiDelete = () => {
+    if (!selectedMessages.length) {
+      return
+    }
 
-        setLoadingMore(false)
+    if (store.connectStore.loginStatus !== V2NIMConst.V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINED) {
+      toast.info(t('networkError'))
+      return
+    }
 
-        if (historyMsgs?.length) {
-          if (historyMsgs.length < HISTORY_LIMIT) {
-            setNoMore(true)
+    showModal({
+      title: t('deleteText'),
+      content: t('delete'),
+      confirmText: t('deleteText'),
+      cancelText: t('cancelText'),
+      onConfirm: async () => {
+        try {
+          const messageBatches = chunkMessages(selectedMessages, MULTI_DELETE_BATCH_SIZE)
+          for (const messageBatch of messageBatches) {
+            await store.msgStore.deleteMsgActive(messageBatch)
           }
-          // 消息已读未读相关
-          handleHistoryMsgReceipt(historyMsgs)
-          return historyMsgs
-        } else {
-          setNoMore(true)
-          return []
+          toast.info(t('deleteMsgSuccessText'))
+          syncConversationLastMessageAfterDelete(store, conversationId)
+          exitMultiSelect()
+        } catch {
+          toast.info(t('deleteMsgFailText'))
         }
       }
-      return []
-    } catch (error) {
-      setLoadingMore(false)
-      throw error
-    }
+    })
   }
 
-  /**
-   * 加载更多消息
-   */
-  const loadMoreMsgs = (lastMsg?: any) => {
-    if (lastMsg) {
-      getHistory(lastMsg.createTime, lastMsg.messageServerId)
-    } else {
-      getHistory(Date.now())
-    }
+  const backToLatestMsgs = async () => {
+    navigate(neUiKitRouterPath.chat, { replace: true })
+    await switchToLatest()
+    setTimeout(() => {
+      emitter.emit(events.ON_SCROLL_BOTTOM)
+    }, 0)
   }
 
-  /**
-   * 设置导航栏标题
-   */
-  const setNavTitle = () => {
-    if (conversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P) {
-      setTitle(
-        store.uiStore.getAppellation({
-          account: to
-        })
-      )
-    } else if (conversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM) {
-      const team = store.teamStore.teams.get(to)
-      const subTitle = `(${team?.memberCount || 0})`
-      setTitle((team?.name || '') + subTitle)
-    }
+  const handleSendMessage = () => {
+    if (!anchorMode) return
+    backToLatestMsgs()
   }
 
-  // 消息列表
   useEffect(() => {
-    // 被解散群的时候, 此刻 conversationId 会变为空字符串的
-    if (conversationId) {
-      setMsgs(store.msgStore.getMsg(conversationId) || [])
-    }
-  }, [conversationId, store.msgStore.getMsg(conversationId)])
+    if (!isMultiSelecting) return
+    setSelectedMessageIds((ids) => {
+      const selectableIds = new Set(msgs.filter(isSelectableMessage).map(getMessageSelectKey))
+      return ids.filter((id) => selectableIds.has(id))
+    })
+  }, [isMultiSelecting, msgs])
 
-  // todo , store.msgStore ui 变了也得变
-
-  // 监听导航栏标题
+  // 使用 autorun 监听导航栏标题（自动追踪 MobX observable 依赖）
+  // 当以下任一变化时自动触发：conversationId、群信息、在线状态
   useEffect(() => {
-    // 防解散群的时候 conversationId 编为空字符串, type 变 unknwon, to 变空字符串
-    if (conversationId) {
-      // 初始设置标题
-      setNavTitle()
-    }
-  }, [conversationId, store.teamStore.teams.get(to)])
+    const dispose = autorun(() => {
+      // 防解散群的时候 conversationId 编为空字符串, type 变 unknown, to 变空字符串
+      if (!conversationId) return
+      
+      if (conversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P) {
+        const appellation = store.uiStore.getAppellation({ account: to })
+        // autorun 会自动追踪 stateMap.get(to) 的变化
+        const userStatus = store.subscriptionStore.getUserStatus(to)
+        const isOnline = checkUserOnline(userStatus)
+        // P2P 会话：标题为昵称，状态文字单独设置（确保昵称过长时状态不被截断）
+        setTitle(appellation)
+        setStatusText(isOnline ? `(${t('userOnlineText')})` : `(${t('userOfflineText')})`)
+      } else if (conversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM) {
+        // autorun 会自动追踪 teams.get(to) 的变化
+        const team = store.teamStore.teams.get(to)
+        const subTitle = `(${team?.memberCount || 0})`
+        // 群聊：标题包含群名和成员数，无状态文字
+        setTitle((team?.name || '') + subTitle)
+        setStatusText('')
+      }
+    })
+    
+    return () => dispose()
+  }, [conversationId, conversationType, to])
 
-  // 进入聊天页首次加载消息, 监听到重新登录了也要重新加载
   useEffect(() => {
-    if (store.connectStore.loginStatus === V2NIMConst.V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINED) {
-      getHistory(Date.now())
-        .then(() => {
-          if (!isMountedRef.current) {
-            setTimeout(() => {
-              emitter.emit(events.ON_SCROLL_BOTTOM)
-              isMountedRef.current = true
-            }, 0)
-          }
-        })
-        .catch((err) => {
-          showToast({
-            message: t('getHistoryFailedText'),
-            type: 'error',
-            duration: 1000
-          })
-          console.error('Get history message failed', err.toString())
-        })
-    }
-  }, [store.connectStore.loginStatus])
+    const key = `${conversationId}-${anchorMessageClientId}`
+    if (anchorMode || anchorMessageClientId || !msgs.length || initialScrollKeyRef.current === key) return
+
+    initialScrollKeyRef.current = key
+    setTimeout(() => {
+      emitter.emit(events.ON_SCROLL_BOTTOM)
+    }, 0)
+  }, [anchorMessageClientId, anchorMode, conversationId, msgs.length])
 
   // 处理可能的回复消息
   const processReplyMsg = (msgs: any) => {
@@ -429,17 +596,13 @@ const Chat = observer(() => {
     nim.V2NIMTeamService.on('onTeamDismissed', onTeamDismissed)
     nim.V2NIMTeamService.on('onTeamLeft', onTeamLeft)
 
-    emitter.on(events.GET_HISTORY_MSG, loadMoreMsgs)
-
     return () => {
       // 解绑事件监听
       nim.V2NIMMessageService.off('onReceiveMessages', onReceiveMessages)
       nim.V2NIMTeamService.off('onTeamDismissed', onTeamDismissed)
       nim.V2NIMTeamService.off('onTeamLeft', onTeamLeft)
-
-      emitter.off(events.GET_HISTORY_MSG, loadMoreMsgs)
     }
-  }, [])
+  }, [conversationId, handleIncomingMessages])
 
   return (
     <div className="msg-page-wrapper-h5">
@@ -452,19 +615,91 @@ const Chat = observer(() => {
           </div>
         }
         rightContent={
-          <div onClick={handleSetting}>
-            <Icon type="icon-More" size={24} />
-          </div>
+          isMultiSelecting ? (
+            <div className="msg-nav-cancel" onClick={exitMultiSelect}>
+              {t('cancelText')}
+            </div>
+          ) : (
+            <div onClick={handleSetting}>
+              <Icon type="icon-More" size={24} />
+            </div>
+          )
         }
+        // P2P 会话时显示在线状态文字，使用 iconContent 确保不被截断
+        iconContent={statusText ? <span className="nav-status-text">{statusText}</span> : undefined}
       />
 
       <div className="msg-alert">
         <NetworkAlert />
       </div>
 
-      <MessageList conversationType={conversationType} to={to} msgs={msgs} loadingMore={loadingMore} noMore={noMore} replyMsgsMap={replyMsgsMap} />
+      <MessageList
+        conversationType={conversationType}
+        to={to}
+        msgs={msgs}
+        loadingOlder={loadingOlder}
+        hasOlder={hasOlder}
+        replyMsgsMap={replyMsgsMap}
+        voiceTextMap={voiceTextMap}
+        setVoiceText={setVoiceText}
+        anchorMessageClientId={anchorMessageClientId}
+        anchorMode={anchorMode}
+        loadingNewer={loadingNewer}
+        autoScrollToBottom={!anchorMode}
+        onLoadOlder={loadOlder}
+        onLoadNewer={loadNewer}
+        isMultiSelecting={isMultiSelecting}
+        selectedMessageIds={selectedMessageIds}
+        onToggleSelect={toggleSelectMessage}
+        onMultiSelect={enterMultiSelect}
+      />
 
-      <MessageInput replyMsgsMap={replyMsgsMap} conversationType={conversationType} to={to} />
+      {anchorMode && (hasNewer || showLatestHint) && (
+        <div className="msg-anchor-latest" onClick={backToLatestMsgs}>
+          {loadingNewer ? <Icon type="icon-a-Frame8" size={20} iconClassName="msg-anchor-loading" /> : <Icon type="icon-jiantou" size={20} />}
+        </div>
+      )}
+
+      {isMultiSelecting ? (
+        <div className="msg-multi-action-bar">
+          <div className={`msg-multi-action ${!selectedMessages.length ? 'disabled' : ''}`} onClick={handleMergeForward}>
+            <div className="msg-multi-action-icon">
+              <Icon type="icon-zhuanfa" size={22} />
+            </div>
+            <div>{t('mergeForwardText')}</div>
+          </div>
+          <div className={`msg-multi-action ${!selectedMessages.length ? 'disabled' : ''}`} onClick={handleMultiForward}>
+            <div className="msg-multi-action-icon">
+              <Icon type="icon-zhuanfa" size={22} />
+            </div>
+            <div>{t('oneByOneForwardText')}</div>
+          </div>
+          <div className={`msg-multi-action ${!selectedMessages.length ? 'disabled' : ''}`} onClick={handleMultiDelete}>
+            <div className="msg-multi-action-icon">
+              <Icon type="icon-shanchu" size={22} />
+            </div>
+            <div>{t('deleteText')}</div>
+          </div>
+        </div>
+      ) : (
+        <MessageInput replyMsgsMap={replyMsgsMap} conversationType={conversationType} to={to} onSendMessage={handleSendMessage} />
+      )}
+
+      {!!multiForwardMsgs.length && (
+        <MessageForward
+          visible={!!multiForwardMsgs.length}
+          msgIdClient={multiForwardMsgs[0]?.messageClientId || ''}
+          msgs={multiForwardMsgs}
+          forwardMode={multiForwardMode}
+          conversationId={conversationId}
+          onClose={() => {
+            setMultiForwardMsgs([])
+          }}
+          onForwardSuccess={() => {
+            exitMultiSelect()
+          }}
+        />
+      )}
     </div>
   )
 })

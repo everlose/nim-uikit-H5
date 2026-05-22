@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite'
 import Icon from '@/NEUIKit/common/components/Icon'
 // import { events } from '@/NEUIKit/common/utils/constants'
 // import emitter from '@/NEUIKit/common/utils/eventBus'
-import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/types'
+import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
 import type { V2NIMMessageAudioAttachment } from 'nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService'
 import './index.less'
 
@@ -11,12 +11,16 @@ interface MessageAudioProps {
   msg: V2NIMMessageForUI
   mode?: 'audio-in' | 'audio-out'
   broadcastNewAudioSrc?: string
+  /**
+   * 语音转文字结果
+   */
+  voiceText?: string
 }
 
 /**
  * 音频消息组件
  */
-const MessageAudio: React.FC<MessageAudioProps> = observer(({ msg, mode, broadcastNewAudioSrc }) => {
+const MessageAudio: React.FC<MessageAudioProps> = observer(({ msg, mode, broadcastNewAudioSrc, voiceText }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [audioIconType, setAudioIconType] = useState('icon-yuyin3')
   const [animationFlag, setAnimationFlag] = useState(false)
@@ -139,12 +143,20 @@ const MessageAudio: React.FC<MessageAudioProps> = observer(({ msg, mode, broadca
   const containerClass = !msg.isSelf || mode === 'audio-in' ? 'audio-in' : 'audio-out'
 
   return (
-    <div className={containerClass} style={{ width: audioContainerWidth + 'px' }} onClick={togglePlay}>
-      <div className="audio-dur">{duration}s</div>
-      <div className="audio-icon-wrapper">
-        <Icon size={24} type={audioIconType} />
+    <div className="message-audio-container">
+      <div className={containerClass} style={{ width: audioContainerWidth + 'px' }} onClick={togglePlay}>
+        <div className="audio-dur">{duration}s</div>
+        <div className="audio-icon-wrapper">
+          <Icon size={24} type={audioIconType} />
+        </div>
+        <audio src={audioSrc} ref={audioRef} onPlay={onAudioPlay} onPause={onAudioStop} onEnded={onAudioEnded} onError={onAudioError} />
       </div>
-      <audio src={audioSrc} ref={audioRef} onPlay={onAudioPlay} onPause={onAudioStop} onEnded={onAudioEnded} onError={onAudioError} />
+      {voiceText && (
+        <div className="voice-text-container">
+          <div className="voice-text-divider" />
+          <div className="voice-text-content">{voiceText}</div>
+        </div>
+      )}
     </div>
   )
 })

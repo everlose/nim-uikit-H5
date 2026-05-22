@@ -7,7 +7,7 @@ import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { toast } from '@/NEUIKit/common/utils/toast'
 import { neUiKitRouterPath } from '@/NEUIKit/common/utils/uikitRouter'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
-import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/types'
+import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
 import './index.less'
 
 interface MessageReadProps {
@@ -27,6 +27,8 @@ const MessageRead: React.FC<MessageReadProps> = observer(({ msg }) => {
 
   /** 是否需要显示 p2p 消息、p2p会话列表消息已读未读，默认 false */
   const p2pMsgReceiptVisible = store.localOptions.p2pMsgReceiptVisible
+  const messageStatusErrorCode = msg.messageStatus?.errorCode
+  const isMessageStatusFailed = messageStatusErrorCode !== undefined && messageStatusErrorCode !== 200
 
   /** 会话类型 */
   const conversationType = nim.V2NIMConversationIdUtil.parseConversationType(msg.conversationId) as unknown as V2NIMConst.V2NIMConversationType
@@ -65,7 +67,7 @@ const MessageRead: React.FC<MessageReadProps> = observer(({ msg }) => {
   }, [conversationType, msg?.yxRead, msg?.yxUnread])
 
   // 如果消息不是发送成功状态，不显示已读状态
-  if (msg.sendingState !== V2NIMConst.V2NIMMessageSendingState.V2NIM_MESSAGE_SENDING_STATE_SUCCEEDED) {
+  if (msg.sendingState !== V2NIMConst.V2NIMMessageSendingState.V2NIM_MESSAGE_SENDING_STATE_SUCCEEDED || isMessageStatusFailed) {
     return null
   }
 

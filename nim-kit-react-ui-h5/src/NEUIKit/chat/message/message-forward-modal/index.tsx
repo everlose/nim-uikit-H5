@@ -6,7 +6,7 @@ import Input from '@/NEUIKit/common/components/Input'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
-import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/types'
+import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
 import './index.less'
 
 interface ForwardToTeamInfo {
@@ -19,8 +19,11 @@ interface MessageForwardModalProps {
   forwardModalVisible: boolean
   forwardTo: string
   forwardMsg: V2NIMMessageForUI | undefined
+  sourceConversationId: string
   forwardConversationType: V2NIMConst.V2NIMConversationType
   forwardToTeamInfo?: ForwardToTeamInfo
+  isOneByOneForward?: boolean
+  isMergeForward?: boolean
   onConfirm: (comment: string) => void
   onCancel: () => void
 }
@@ -29,9 +32,9 @@ interface MessageForwardModalProps {
  * 消息转发模态框组件
  */
 const MessageForwardModal: React.FC<MessageForwardModalProps> = observer(
-  ({ forwardModalVisible, forwardTo, forwardMsg, forwardConversationType, forwardToTeamInfo, onConfirm, onCancel }) => {
+  ({ forwardModalVisible, forwardTo, forwardMsg, sourceConversationId, forwardConversationType, forwardToTeamInfo, isOneByOneForward, isMergeForward, onConfirm, onCancel }) => {
     const { t } = useTranslation()
-    const { store } = useStateContext()
+    const { store, nim } = useStateContext()
 
     // 转发评论
     const [forwardComment, setForwardComment] = useState('')
@@ -58,12 +61,24 @@ const MessageForwardModal: React.FC<MessageForwardModalProps> = observer(
       })
     }, [forwardTo])
 
-    // 转发消息的发送方昵称
-    const forwardFromNick = useMemo(() => {
-      return store.uiStore.getAppellation({
-        account: forwardMsg?.senderId as string
-      })
-    }, [forwardMsg?.senderId])
+    // 转发消息所属会话名称
+    const forwardSourceName = useMemo(() => {
+      const conversationId = sourceConversationId || forwardMsg?.conversationId
+      if (!conversationId) return ''
+
+      const conversationType = nim.V2NIMConversationIdUtil.parseConversationType(conversationId) as unknown as V2NIMConst.V2NIMConversationType
+      const targetId = nim.V2NIMConversationIdUtil.parseConversationTargetId(conversationId)
+
+      if (conversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM) {
+        return store.teamStore.teams.get(targetId)?.name || targetId
+      }
+
+      return (
+        store.uiStore.getAppellation({
+          account: targetId
+        }) || targetId
+      )
+    }, [sourceConversationId, forwardMsg?.conversationId])
 
     return (
       <Modal
@@ -89,7 +104,7 @@ const MessageForwardModal: React.FC<MessageForwardModalProps> = observer(
             </div>
           )}
 
-          <div className="description">{`[${t('forwardText')}] ${forwardFromNick} ${t('sessionRecordText')}`}</div>
+          <div className="description">{`[${t(isMergeForward ? 'mergeForwardText' : isOneByOneForward ? 'oneByOneForwardText' : 'forwardText')}] ${forwardSourceName || ''} ${t('sessionRecordText')}`}</div>
 
           <Input
             id="forward-input"
