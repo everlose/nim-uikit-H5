@@ -19,6 +19,8 @@
       ></div>
       <div
         class="chat_tooltip__popper"
+        v-if="popperRendered"
+        ref="popperRef"
         @click.stop="() => {}"
         :style="[
           style,
@@ -65,6 +67,7 @@ export default {
   data() {
     return {
       isShow: this.visible,
+      popperRendered: this.visible,
       title: "Hello",
       arrowLeft: 0,
       query: null,
@@ -87,9 +90,12 @@ export default {
     visible: {
       handler(val) {
         if (val) {
+          this.popperRendered = true;
           this.$nextTick(() => {
             this.getPosition();
           });
+        } else {
+          this.popperRendered = false;
         }
         this.isShow = val;
       },
@@ -100,39 +106,61 @@ export default {
     // #ifdef H5
     window.addEventListener("click", () => {
       this.isShow = false;
+      this.popperRendered = false;
     });
     // #endif
-    this.getPosition();
+    if (this.popperRendered) {
+      this.getPosition();
+    }
   },
   methods: {
     close() {
       this.isShow = false;
+      this.popperRendered = false;
     },
     fixedWrap() {
       this.isShow = false;
+      this.popperRendered = false;
     },
     async handleClick() {
       if (this.isShow) {
+        this.popperRendered = false;
         return (this.isShow = false);
       }
+      this.popperRendered = true;
+      await new Promise((resolve) => {
+        requestAnimationFrame(resolve);
+      });
       await this.getPosition();
       this.isShow = true;
     },
     getPosition() {
       return new Promise((resolve) => {
         const tooltipContent = this.$el.querySelector(".chat_tooltip_content");
-        const tooltipPopper = this.$el.querySelector(".chat_tooltip__popper");
+        const tooltipPopper = this.$refs.popperRef;
 
         if (tooltipContent && tooltipPopper) {
-          const contentRect = tooltipContent.getBoundingClientRect();
           const popperRect = tooltipPopper.getBoundingClientRect();
-          const { top, width, height, left } = contentRect;
+          const contentRect = tooltipContent.getBoundingClientRect();
           const windowWidth = window.innerWidth;
+          const windowHeight = window.innerHeight;
+          const margin = 10;
+          const gap = 8;
+          const touchPoint = this.touchStartPosition;
+          const anchorX =
+            touchPoint?.x || contentRect.left + contentRect.width / 2;
+          const anchorY =
+            touchPoint?.y || contentRect.top + contentRect.height / 2;
           let objStyle = {};
           let objStyle1 = {};
 
-          // 判断是否显示在顶部还是底部
-          if (top <= 300) {
+          const popperWidth = popperRect.width;
+          const popperHeight = popperRect.height;
+          const hasEnoughSpaceAbove = anchorY - popperHeight - gap >= margin;
+          const hasEnoughSpaceBelow =
+            anchorY + popperHeight + gap <= windowHeight - margin;
+
+          if (!hasEnoughSpaceAbove && hasEnoughSpaceBelow) {
             this.placement = "bottom";
           } else {
             this.placement = "top";
@@ -140,61 +168,28 @@ export default {
 
           switch (this.placement) {
             case "top":
-              if (this.align) {
-                // 计算左侧位置，确保不超出屏幕
-                let leftPos = -100;
-                if (width < 90) {
-                  leftPos = -200;
-                }
-                // 检查是否会超出屏幕左侧
-                if (left + leftPos < 0) {
-                  leftPos = -left + 10; // 留10px边距
-                }
-                // 检查是否会超出屏幕右侧
-                if (left + leftPos + popperRect.width > windowWidth) {
-                  leftPos = windowWidth - left - popperRect.width - 10;
-                }
-                objStyle.left = `${leftPos}px`;
-              } else {
-                let leftPos = 50;
-                // 检查是否会超出屏幕右侧
-                if (left + leftPos + popperRect.width > windowWidth) {
-                  leftPos = windowWidth - left - popperRect.width - 10;
-                }
-                objStyle.left = `${leftPos}px`;
-              }
-              objStyle.bottom = `${height + 8}px`;
+              objStyle.top = `${Math.max(
+                margin,
+                anchorY - popperHeight - gap
+              )}px`;
               break;
 
             case "bottom":
-              if (this.align) {
-                let leftPos = -100;
-                if (width < 100) {
-                  leftPos = -200;
-                }
-                // 检查是否会超出屏幕左侧
-                if (left + leftPos < 0) {
-                  leftPos = -left + 10;
-                }
-                // 检查是否会超出屏幕右侧
-                if (left + leftPos + popperRect.width > windowWidth) {
-                  leftPos = windowWidth - left - popperRect.width - 10;
-                }
-                objStyle.left = `${leftPos}px`;
-              } else {
-                let leftPos = 50;
-                // 检查是否会超出屏幕右侧
-                if (left + leftPos + popperRect.width > windowWidth) {
-                  leftPos = windowWidth - left - popperRect.width - 10;
-                }
-                objStyle.left = `${leftPos}px`;
-              }
-              objStyle.top = `${height + 8}px`;
+              objStyle.top = `${Math.min(
+                windowHeight - popperHeight - margin,
+                anchorY + gap
+              )}px`;
               break;
           }
+          objStyle.left = `${Math.min(
+            windowWidth - popperWidth - margin,
+            Math.max(margin, anchorX - popperWidth / 2)
+          )}px`;
 
           this.style = objStyle;
           this.arrowStyle = objStyle1;
+          resolve();
+        } else {
           resolve();
         }
       });
@@ -270,7 +265,7 @@ export default {
 
   visibility: hidden;
 
-  position: absolute;
+  position: fixed;
   border-radius: 4px;
   font-size: 12px;
   padding: 10px;

@@ -167,6 +167,8 @@ import IconGreenPin from "../static/green-pin.png";
 import IconChoosePicture from "../static/choose-picture.png";
 import IconCollection from "../static/icons/add-collection.png";
 import IconBlueCollection from "../static/icons/collection.png";
+import IconVoiceToText from "../static/icons/icon-voice-to-text.png";
+import IconMultiSelect from "../static/icons/icon-multi-select.svg";
 const props = withDefaults(
   defineProps<{
     type: string;
@@ -335,6 +337,8 @@ const urlMap = {
   "choose-picture": IconChoosePicture,
   "icon-collection": IconCollection,
   "blue-collection": IconBlueCollection,
+  "icon-voice-to-text": IconVoiceToText,
+  "icon-multi-select": IconMultiSelect,
 };
 
 //以上链接访问有频率控制，建议您将静态放到您服务器上，然后修改上面的链接即可

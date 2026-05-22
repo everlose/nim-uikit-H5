@@ -12,7 +12,7 @@ import type { V2NIMTeam } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService
 import type {
   V2NIMMessageForUI,
   YxServerExt,
-} from "@xkit-yx/im-store-v2/dist/types/types";
+} from "@xkit-yx/im-store-v2/dist/types/src/types";
 import type { V2NIMMessageNotificationAttachment } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
 import { onUnmounted, ref, getCurrentInstance } from "vue";
 import { autorun } from "mobx";

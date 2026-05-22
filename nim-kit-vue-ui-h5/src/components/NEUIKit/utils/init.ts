@@ -8,9 +8,9 @@ export const init = () => {
     localStorage.getItem("enableV2CloudConversation") === "on";
   const nim = V2NIM.getInstance(
     {
-      appkey: "",
+      appkey: "3e215d27b6a6a9e27dad7ef36dd5b65c",
       needReconnect: true,
-      debugLevel: "debug",
+      debugLevel: "log",
       apiVersion: "v2",
       enableV2CloudConversation: enableV2CloudConversation,
     },
@@ -32,6 +32,8 @@ export const init = () => {
       p2pMsgReceiptVisible: true,
       // 是否需要显示群组消息已读未读，默认 false
       teamMsgReceiptVisible: true,
+      // 当前 H5 使用的 SDK 版本未暴露 getUserAIBotList，显式关闭用户级 AI Bot 拉取。
+      aiBotsVisible: false,
       // 群组被邀请模式，默认需要验证
       teamAgreeMode:
         V2NIMConst.V2NIMTeamAgreeMode.V2NIM_TEAM_AGREE_MODE_NO_AUTH,
@@ -46,6 +48,7 @@ export const init = () => {
     },
     "H5"
   );
+
   return {
     nim,
     store,

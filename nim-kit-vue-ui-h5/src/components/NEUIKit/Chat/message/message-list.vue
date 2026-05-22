@@ -2,15 +2,14 @@
   <div class="msg-list-wrapper" @touchstart="handleTapMessageList">
     <div
       id="message-scroll-list"
-      scroll-y="true"
-      :scroll-top="scrollTop"
       class="message-scroll-list"
       ref="messageListRef"
+      @scroll="handleScroll"
     >
-      <div v-show="!noMore" @click="onLoadMore" class="view-more-text">
-        {{ t("viewMoreText") }}
+      <div v-show="hasOlder" @click="onLoadMore" class="view-more-text">
+        {{ loadingOlder ? t("loadingMoreText") : t("viewMoreText") }}
       </div>
-      <div class="msg-tip" v-show="noMore">{{ t("noMoreText") }}</div>
+      <div class="msg-tip" v-show="!hasOlder">{{ t("noMoreText") }}</div>
       <div v-for="(item, index) in finalMsgs" :key="item.messageClientId">
         <MessageItem
           :msg="item"
@@ -18,8 +17,18 @@
           :key="item.messageClientId"
           :reply-msgs-map="replyMsgsMap"
           :broadcastNewAudioSrc="broadcastNewAudioSrc"
-        >
-        </MessageItem>
+          :voice-text-map="props.voiceTextMap"
+          :set-voice-text="props.setVoiceText"
+          :is-multi-selecting="props.isMultiSelecting"
+          :selected="
+            props.selectedMessageIds.includes(getMessageSelectKey(item))
+          "
+          :on-toggle-select="props.onToggleSelect"
+          :on-multi-select="props.onMultiSelect"
+        />
+      </div>
+      <div v-if="anchorMode && loadingNewer" class="msg-tip">
+        {{ t("loadingMoreText") }}
       </div>
     </div>
   </div>
@@ -34,41 +43,77 @@ import {
   getCurrentInstance,
   nextTick,
   onMounted,
+  watch,
 } from "vue";
 import MessageItem from "./message-item.vue";
 import { caculateTimeago } from "../../utils/date";
 import { t } from "../../utils/i18n";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import { autorun } from "mobx";
-import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import type { V2NIMTeam } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService";
 import emitter from "../../utils/eventBus";
-import { events } from "../../utils/constants";
+import { events, MSG_ID_FLAG } from "../../utils/constants";
+import { getMessageSelectKey } from "./message-multi-select/utils";
 
 const props = withDefaults(
   defineProps<{
     msgs: V2NIMMessageForUI[];
     conversationType: V2NIMConst.V2NIMConversationType;
     to: string;
-    loadingMore?: boolean;
-    noMore?: boolean;
+    loadingOlder?: boolean;
+    hasOlder?: boolean;
     replyMsgsMap?: {
       [key: string]: V2NIMMessageForUI;
     };
+    voiceTextMap?: Record<string, string>;
+    setVoiceText?: (messageClientId: string, text: string) => void;
+    anchorMessageClientId?: string;
+    anchorMode?: boolean;
+    loadingNewer?: boolean;
+    autoScrollToBottom?: boolean;
+    onLoadOlder?: (firstMsg?: V2NIMMessageForUI) => void | Promise<unknown>;
+    onLoadNewer?: (lastMsg?: V2NIMMessageForUI) => void | Promise<unknown>;
+    isMultiSelecting?: boolean;
+    selectedMessageIds?: string[];
+    onToggleSelect?: (msg: V2NIMMessageForUI) => void;
+    onMultiSelect?: (msg: V2NIMMessageForUI) => void;
   }>(),
-  {}
+  {
+    loadingOlder: false,
+    hasOlder: true,
+    anchorMessageClientId: "",
+    anchorMode: false,
+    loadingNewer: false,
+    autoScrollToBottom: true,
+    isMultiSelecting: false,
+    selectedMessageIds: () => [],
+  }
 );
 
-const { proxy } = getCurrentInstance()!; // 获取组件实例
+const { proxy } = getCurrentInstance()!;
 const messageListRef = ref<HTMLElement | null>(null);
+const broadcastNewAudioSrc = ref<string>("");
+const anchorScrolled = ref(false);
+const anchorScrollId = ref("");
+const pagingLock = ref(false);
+const pendingPagination = ref<{
+  direction: "older" | "newer";
+  prevScrollHeight: number;
+  prevScrollTop: number;
+} | null>(null);
 
-const scrollTop = ref(0);
+const isNormalMsg = (item: any) =>
+  !(
+    item.messageType ===
+      V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM &&
+    ["beReCallMsg", "reCallMsg"].includes(item.recallType || "")
+  );
 
 // 处理完的最终消息列表
 const finalMsgs = computed(() => {
   const res: V2NIMMessageForUI[] = [];
   props.msgs.forEach((item, index) => {
-    // 如果两条消息间隔超过5分钟，插入一条自定义时间消息
     if (
       index > 0 &&
       item.createTime - props.msgs[index - 1].createTime > 5 * 60 * 1000
@@ -92,7 +137,12 @@ const finalMsgs = computed(() => {
   return res;
 });
 
-const broadcastNewAudioSrc = ref<string>("");
+const getFirstNormalMsg = () => finalMsgs.value.find(isNormalMsg);
+
+const getLastNormalMsg = () => {
+  const normalMsgs = finalMsgs.value.filter(isNormalMsg);
+  return normalMsgs[normalMsgs.length - 1];
+};
 
 // 消息滑动到底部
 const scrollToBottom = () => {
@@ -103,22 +153,105 @@ const scrollToBottom = () => {
   });
 };
 
+const scrollToAnchor = () => {
+  if (!props.anchorMessageClientId) {
+    return false;
+  }
+  const el = document.getElementById(
+    `${MSG_ID_FLAG}${props.anchorMessageClientId}`
+  );
+  if (!el) {
+    return false;
+  }
+  el.scrollIntoView({ block: "center" });
+  return true;
+};
+
+const unlockPaginationAfterRender = () => {
+  requestAnimationFrame(() => {
+    const pending = pendingPagination.value;
+    if (!pending || props.loadingOlder || props.loadingNewer) {
+      return;
+    }
+
+    if (messageListRef.value && pending.direction === "older") {
+      const nextScrollHeight = messageListRef.value.scrollHeight;
+      messageListRef.value.scrollTop =
+        pending.prevScrollTop + (nextScrollHeight - pending.prevScrollHeight);
+    }
+
+    requestAnimationFrame(() => {
+      if (props.loadingOlder || props.loadingNewer) {
+        return;
+      }
+      pagingLock.value = false;
+      pendingPagination.value = null;
+    });
+  });
+};
+
+const startPagination = (
+  direction: "older" | "newer",
+  load: () => void | Promise<unknown>
+) => {
+  if (pagingLock.value || !messageListRef.value) {
+    return;
+  }
+
+  pagingLock.value = true;
+  pendingPagination.value = {
+    direction,
+    prevScrollHeight: messageListRef.value.scrollHeight,
+    prevScrollTop: messageListRef.value.scrollTop,
+  };
+
+  Promise.resolve(load()).finally(() => {
+    setTimeout(() => {
+      if (!props.loadingOlder && !props.loadingNewer) {
+        unlockPaginationAfterRender();
+      }
+    }, 0);
+  });
+};
+
 // 加载更多消息
 const onLoadMore = () => {
-  const msg = finalMsgs.value.filter(
-    (item) =>
-      !(
-        item.messageType ===
-          V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM &&
-        ["beReCallMsg", "reCallMsg"].includes(item.recallType || "")
-      )
-  )[0];
-  emitter.emit(events.GET_HISTORY_MSG, msg);
+  if (pagingLock.value || props.loadingOlder || !props.onLoadOlder) {
+    return;
+  }
+  const msg = getFirstNormalMsg();
+  if (!msg) {
+    return;
+  }
+  startPagination("older", () => props.onLoadOlder?.(msg));
+};
+
+const handleScroll = () => {
+  if (!messageListRef.value) {
+    return;
+  }
+  if (pagingLock.value || props.loadingOlder || props.loadingNewer) {
+    return;
+  }
+
+  const { scrollTop, scrollHeight, clientHeight } = messageListRef.value;
+  if (
+    props.anchorMode &&
+    props.onLoadNewer &&
+    scrollHeight - scrollTop - clientHeight < 24
+  ) {
+    const msg = getLastNormalMsg();
+    if (msg) {
+      startPagination("newer", () => props.onLoadNewer?.(msg));
+    }
+  }
+  if (props.anchorMode && scrollTop < 24) {
+    onLoadMore();
+  }
 };
 
 // 点击消息列表
 const handleTapMessageList = () => {
-  // 点击消息列表时让输入框失焦
   const activeElement = document.activeElement as HTMLElement;
   if (activeElement && activeElement.tagName === "INPUT") {
     activeElement.blur();
@@ -149,29 +282,74 @@ onBeforeMount(() => {
     });
   }
 
-  // 加载更多消息
-  emitter.on(events.ON_LOAD_MORE, () => {
-    const msg = finalMsgs.value.filter(
-      (item) =>
-        !(
-          item.messageType ===
-            V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM &&
-          ["beReCallMsg", "reCallMsg"].includes(item.recallType || "")
-        )
-    )[0];
-    if (msg) {
-      emitter.emit(events.GET_HISTORY_MSG, msg);
-    }
-  });
+  emitter.on(events.ON_LOAD_MORE, onLoadMore);
 });
 
 onMounted(() => {
-  emitter.on(events.ON_SCROLL_BOTTOM, scrollToBottom);
+  if (props.autoScrollToBottom) {
+    emitter.on(events.ON_SCROLL_BOTTOM, scrollToBottom);
+  }
+
+  setTimeout(() => {
+    if (props.anchorMessageClientId) {
+      if (scrollToAnchor()) {
+        anchorScrolled.value = true;
+        anchorScrollId.value = props.anchorMessageClientId;
+      }
+    } else if (props.autoScrollToBottom) {
+      scrollToBottom();
+    }
+  }, 100);
 });
+
+watch(
+  () => [props.anchorMessageClientId, finalMsgs.value.length],
+  () => {
+    if (!props.anchorMessageClientId) {
+      return;
+    }
+    if (anchorScrollId.value !== props.anchorMessageClientId) {
+      anchorScrolled.value = false;
+      anchorScrollId.value = props.anchorMessageClientId;
+    }
+    if (anchorScrolled.value) {
+      return;
+    }
+
+    setTimeout(() => {
+      if (scrollToAnchor()) {
+        anchorScrolled.value = true;
+      }
+    }, 100);
+  }
+);
+
+watch(
+  () => [finalMsgs.value.length, props.loadingOlder, props.loadingNewer],
+  () => {
+    const pending = pendingPagination.value;
+    if (!pending || props.loadingOlder || props.loadingNewer) {
+      return;
+    }
+    unlockPaginationAfterRender();
+  }
+);
+
+watch(
+  () => props.autoScrollToBottom,
+  (autoScroll, oldAutoScroll) => {
+    if (oldAutoScroll) {
+      emitter.off(events.ON_SCROLL_BOTTOM, scrollToBottom);
+    }
+    if (autoScroll) {
+      emitter.on(events.ON_SCROLL_BOTTOM, scrollToBottom);
+    }
+  }
+);
 
 onUnmounted(() => {
   emitter.off(events.ON_SCROLL_BOTTOM, scrollToBottom);
-  emitter.off(events.ON_LOAD_MORE);
+  emitter.off(events.ON_LOAD_MORE, onLoadMore);
   teamWatch();
 });
 </script>
@@ -183,7 +361,6 @@ onUnmounted(() => {
   display: flex;
   height: 100%;
   box-sizing: border-box;
-  padding: 0px 10px 5px 10px;
   transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
   background-color: #fff;
 }

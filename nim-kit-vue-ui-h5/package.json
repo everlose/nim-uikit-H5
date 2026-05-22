@@ -1,22 +1,25 @@
 {
   "name": "im-kit-vue-ui-h5",
-  "version": "10.1.0",
+  "version": "10.2.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host",
-    "build": "run-p type-check \"build-only {@}\" --",
+    "dev": "node scripts/check-env.js local && node scripts/run-vite.js local --host",
+    "start": "node scripts/check-env.js production && node scripts/run-vite.js production --host",
+    "build": "node scripts/check-env.js production && run-p type-check build-only",
+    "build:dev": "node scripts/check-env.js local && run-p type-check build-only:dev",
     "preview": "vite preview",
-    "build-only": "vite build",
+    "build-only": "node scripts/run-vite.js production build",
+    "build-only:dev": "node scripts/run-vite.js local build",
     "type-check": "vue-tsc --build"
   },
   "dependencies": {
-    "@xkit-yx/im-store-v2": "^0.8.7",
+    "@xkit-yx/im-store-v2": "^0.9.1",
     "@xkit-yx/utils": "^0.7.2",
     "dayjs": "^1.11.7",
     "mitt": "^3.0.1",
     "mobx": "^6.6.1",
-    "nim-web-sdk-ng": "^10.9.30",
+    "nim-web-sdk-ng": "^10.9.81",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },

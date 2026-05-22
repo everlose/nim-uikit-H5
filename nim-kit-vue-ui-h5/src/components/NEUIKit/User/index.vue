@@ -1,28 +1,38 @@
 <template>
   <div class="user-info-wrapper">
-    <div class="card-wrapper" @click="gotoMyDetail">
-      <UserCard
-        :account="myUserInfo && myUserInfo.accountId"
-        :nick="myUserInfo && myUserInfo.name"
-      ></UserCard>
-      <Icon iconClassName="arrow" type="icon-jiantou"></Icon>
-    </div>
-    <div class="box-shadow"></div>
-    <div class="userInfo-item-wrapper">
-      <div class="userInfo-item" @click="gotoSetting">
-        <div class="item-left">
-          <Icon iconClassName="guanyu" type="icon-shezhi1"></Icon>
-          {{ t("setText") }}
-        </div>
-        <Icon iconClassName="icon-arrow" type="icon-jiantou"></Icon>
+    <div class="user-content">
+      <div class="card-wrapper" @click="gotoMyDetail">
+        <UserCard
+          :account="myUserInfo && myUserInfo.accountId"
+          :nick="myUserInfo && myUserInfo.name"
+        ></UserCard>
+        <Icon iconClassName="arrow" type="icon-jiantou"></Icon>
       </div>
-      <div class="shadow"></div>
-      <div class="userInfo-item" @click="gotoAbout">
-        <div class="item-left">
-          <Icon iconClassName="guanyu" type="icon-guanyu"></Icon>
-          {{ t("commsEaseText") }}
+      <div class="box-shadow"></div>
+      <div class="userInfo-item-wrapper">
+        <div class="userInfo-item" @click="gotoSetting">
+          <div class="item-left">
+            <Icon iconClassName="guanyu" type="icon-shezhi1"></Icon>
+            {{ t("setText") }}
+          </div>
+          <Icon iconClassName="icon-arrow" type="icon-jiantou"></Icon>
         </div>
-        <Icon iconClassName="icon-arrow" type="icon-jiantou"></Icon>
+        <div class="shadow"></div>
+        <div class="userInfo-item" @click="gotoCollection">
+          <div class="item-left">
+            <Icon iconClassName="guanyu" type="blue-collection"></Icon>
+            {{ t("collectionText") }}
+          </div>
+          <Icon iconClassName="icon-arrow" type="icon-jiantou"></Icon>
+        </div>
+        <div class="shadow"></div>
+        <div class="userInfo-item" @click="gotoAbout">
+          <div class="item-left">
+            <Icon iconClassName="guanyu" type="icon-guanyu"></Icon>
+            {{ t("commsEaseText") }}
+          </div>
+          <Icon iconClassName="icon-arrow" type="icon-jiantou"></Icon>
+        </div>
       </div>
     </div>
   </div>
@@ -57,6 +67,9 @@ onMounted(() => {
 const gotoSetting = () => {
   router.push(neUiKitRouterPath.userSetting);
 };
+const gotoCollection = () => {
+  router.push(neUiKitRouterPath.collection);
+};
 const gotoAbout = () => {
   router.push(neUiKitRouterPath.aboutNetease);
 };
@@ -74,6 +87,15 @@ onUnmounted(() => {
 .user-info-wrapper {
   background-color: #fff;
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.user-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 /* 卡片容器 */
 .card-wrapper {

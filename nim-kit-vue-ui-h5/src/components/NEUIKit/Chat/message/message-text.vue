@@ -34,18 +34,22 @@
 import Icon from "../../CommonComponents/Icon.vue";
 import { parseText } from "../../utils/parseText";
 import { EMOJI_ICON_MAP_CONFIG } from "../../utils/emoji";
-import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 
 const props = withDefaults(
   defineProps<{
     msg: V2NIMMessageForUI;
     fontSize?: number;
+    disableAit?: boolean;
   }>(),
   {}
 );
 
 // 解析文本
-const textArr = parseText(props.msg?.text || "", props.msg?.serverExtension);
+const textArr = parseText(
+  props.msg?.text || "",
+  props.disableAit ? undefined : props.msg?.serverExtension
+);
 </script>
 
 <style scoped>

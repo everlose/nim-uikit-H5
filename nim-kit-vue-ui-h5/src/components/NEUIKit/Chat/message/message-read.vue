@@ -2,7 +2,8 @@
   <div
     v-if="
       props.msg.sendingState ==
-      V2NIMConst.V2NIMMessageSendingState.V2NIM_MESSAGE_SENDING_STATE_SUCCEEDED
+        V2NIMConst.V2NIMMessageSendingState.V2NIM_MESSAGE_SENDING_STATE_SUCCEEDED &&
+      !isMessageStatusFailed
     "
     class="msg-read-wrapper"
   >
@@ -53,7 +54,7 @@
 /** 消息已读未读组件 */
 
 import { computed, ref, onMounted, onUnmounted, getCurrentInstance } from "vue";
-import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import Icon from "../../CommonComponents/Icon.vue";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import { useRouter } from "vue-router";
@@ -73,6 +74,12 @@ const router = useRouter();
 const { proxy } = getCurrentInstance()!; // 获取组件实例
 const store = proxy?.$UIKitStore;
 const nim = proxy?.$NIM;
+const messageStatusErrorCode = computed(() => props.msg.messageStatus?.errorCode);
+const isMessageStatusFailed = computed(
+  () =>
+    messageStatusErrorCode.value !== undefined &&
+    messageStatusErrorCode.value !== 200
+);
 /** 是否需要显示群组消息已读未读，默认 false */
 const teamManagerVisible = store?.localOptions.teamMsgReceiptVisible;
 

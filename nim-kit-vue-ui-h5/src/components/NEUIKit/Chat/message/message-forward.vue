@@ -76,8 +76,11 @@
     :forward-modal-visible="forwardModalVisible"
     :forward-to="forwardTo"
     :forward-msg="forwardMsg"
+    :source-conversation-id="conversationId"
     :forward-conversation-type="forwardConversationType"
     :forward-to-team-info="forwardToTeamInfo"
+    :is-one-by-one-forward="forwardMode === 'oneByOne'"
+    :forward-mode="forwardMode"
     @confirm="handleForwardConfirm"
     @cancel="handleForwardCancel"
   />
@@ -96,10 +99,16 @@ import ForwardModal from "./message-forward-modal.vue";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import { onMounted } from "vue";
 import { toast } from "../../utils/toast";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
+import { sendMergedForwardMessage } from "./merged-forward/utils";
 
 const props = defineProps<{
   modelValue: boolean;
   msgIdClient: string; // 转发的消息对象
+  conversationId?: string;
+  msg?: V2NIMMessageForUI;
+  msgs?: V2NIMMessageForUI[];
+  forwardMode?: "normal" | "oneByOne" | "merged";
 }>();
 
 const emit = defineEmits<{
@@ -108,11 +117,15 @@ const emit = defineEmits<{
   (e: "cancel"): void;
   (e: "confirm", targetId: string, type: "friend" | "team"): void;
   (e: "close"): void;
+  (e: "forwardSuccess"): void;
 }>();
 
 const { proxy } = getCurrentInstance()!;
 const store = proxy?.$UIKitStore;
 const nim = proxy?.$NIM;
+const forwardMode = computed(() =>
+  props.forwardMode || (props.msgs?.length ? "oneByOne" : "normal")
+);
 const visible = computed({
   get: () => props.modelValue,
   set: (val) => emit("update:modelValue", val),
@@ -123,11 +136,16 @@ const forwardConversationType = ref<V2NIMConst.V2NIMConversationType>(
   V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P
 );
 // 当前会话ID
-const conversationId = store?.uiStore.selectedConversation;
+const conversationId = computed(
+  () => props.conversationId || store?.uiStore.selectedConversation
+);
 
 let msgIdClient = "";
 const forwardTo = ref("");
 const forwardMsg = ref();
+const forwardMsgs = computed(() =>
+  props.msgs?.length ? props.msgs : forwardMsg.value ? [forwardMsg.value] : []
+);
 // 转发的目标群
 const forwardToTeamInfo = ref<V2NIMTeam>();
 // 转发弹窗
@@ -137,7 +155,7 @@ const forwardModalVisible = ref(false);
 const handleForwardConfirm = (forwardComment: string) => {
   forwardModalVisible.value = false;
 
-  if (!forwardMsg.value) {
+  if (!forwardMsgs.value.length) {
     toast.info(t("getForwardMessageFailed"));
     return;
   }
@@ -149,10 +167,37 @@ const handleForwardConfirm = (forwardComment: string) => {
       : "teamConversationId"
   ](forwardTo.value);
 
-  store?.msgStore
-    .forwardMsgActive(forwardMsg.value, forwardConversationId, forwardComment)
+  if (!store || !conversationId.value) {
+    toast.info(t("getForwardMessageFailed"));
+    return;
+  }
+
+  const forwardPromise =
+    forwardMode.value === "merged"
+      ? sendMergedForwardMessage({
+          store,
+          nim,
+          msgs: forwardMsgs.value,
+          conversationId: forwardConversationId,
+          sourceConversationId: conversationId.value,
+          appVersion: "H5",
+          chatHistoryText: t("chatHistoryText"),
+          comment: forwardComment,
+        })
+      : Promise.all(
+          forwardMsgs.value.map((msg) =>
+            store?.msgStore.forwardMsgActive(
+              msg,
+              forwardConversationId,
+              forwardComment
+            )
+          )
+        );
+
+  Promise.resolve(forwardPromise)
     .then(() => {
       toast.info(t("forwardSuccessText"));
+      emit("forwardSuccess");
     })
     .catch(() => {
       toast.info(t("forwardFailedText"));
@@ -208,11 +253,12 @@ const switchTab = (tab: "friend" | "team") => {
 const selectItem = (_forwardTo: string, conversationType) => {
   selectedId.value = _forwardTo;
   forwardConversationType.value = conversationType;
-  if (_forwardTo && msgIdClient) {
+  if (_forwardTo && (msgIdClient || props.msgs?.length)) {
     forwardTo.value = _forwardTo;
-    forwardMsg.value = store?.msgStore.getMsg(conversationId, [
-      msgIdClient,
-    ])?.[0];
+    forwardMsg.value =
+      props.msgs?.[0] ||
+      props.msg ||
+      store?.msgStore.getMsg(conversationId.value, [msgIdClient])?.[0];
 
     forwardModalVisible.value = true;
     if (

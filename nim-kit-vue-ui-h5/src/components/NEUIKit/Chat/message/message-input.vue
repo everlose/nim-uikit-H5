@@ -118,6 +118,18 @@
         </div>
         <div class="icon-text">{{ t("albumText") }}</div>
       </div>
+      <div class="send-more-panel-item-wrapper">
+        <div class="send-more-panel-item">
+          <input
+            type="file"
+            ref="fileInput"
+            class="file-input-overlay"
+            @change="onFileSelected"
+          />
+          <Icon @click="handleSendFileMsg" :size="26" type="icon-wenjian" />
+        </div>
+        <div class="icon-text">{{ t("fileText") }}</div>
+      </div>
     </div>
   </div>
   <BottomPopup
@@ -169,7 +181,7 @@ import type {
   V2NIMMessageForUI,
   YxServerExt,
   YxAitMsg,
-} from "@xkit-yx/im-store-v2/dist/types/types";
+} from "@xkit-yx/im-store-v2/dist/types/src/types";
 import type { V2NIMMessage } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
 import { toast } from "../../utils/toast";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
@@ -189,6 +201,9 @@ const props = withDefaults(
   }>(),
   {}
 );
+const emit = defineEmits<{
+  (e: "send-message"): void;
+}>();
 
 const conversationId =
   props.conversationType ===
@@ -233,6 +248,7 @@ const mentionPopupVisible = ref(false);
 const cursorPosition = ref(0); // 记录光标位置
 const atPosition = ref(0); // 记录@符号的位置
 const selectedAtMembers = ref<{ accountId: string; appellation: string }[]>([]); // 选中@成员
+const prevInputText = ref("");
 
 // 更新群禁言
 const updateTeamMute = () => {
@@ -337,20 +353,153 @@ const onAtMembersExtHandler = () => {
   // @ts-ignore
   return ext;
 };
+const findNewAtPosition = (newText: string, prevText: string): number => {
+  const prevAtCount = (prevText.match(/@/g) || []).length;
+  const newAtCount = (newText.match(/@/g) || []).length;
+
+  if (newAtCount <= prevAtCount) {
+    return -1;
+  }
+
+  for (let i = 0; i < newText.length; i++) {
+    if (newText[i] !== "@") {
+      continue;
+    }
+
+    const prefixAtCount = (newText.substring(0, i).match(/@/g) || []).length;
+    const prevPrefixAtCount = (
+      prevText.substring(0, Math.min(i, prevText.length)).match(/@/g) || []
+    ).length;
+
+    if (prefixAtCount > prevPrefixAtCount) {
+      return i;
+    }
+  }
+
+  return newText.lastIndexOf("@");
+};
+
+const findDeletePosition = (prevText: string, newText: string): number => {
+  const minLen = Math.min(prevText.length, newText.length);
+  for (let i = 0; i < minLen; i++) {
+    if (prevText[i] !== newText[i]) {
+      return i;
+    }
+  }
+  return newText.length;
+};
+
+const removeAtMemberResidue = (
+  member: { accountId: string; appellation: string },
+  newValue: string,
+  prevValue: string
+): string | null => {
+  const atText = `@${member.appellation}`;
+
+  if (newValue.includes(atText)) {
+    return null;
+  }
+
+  const posInPrev = prevValue.indexOf(atText);
+  if (posInPrev === -1) {
+    return null;
+  }
+
+  const deleteStart = findDeletePosition(prevValue, newValue);
+  if (deleteStart === -1) {
+    return null;
+  }
+
+  const atStart = posInPrev;
+  const atEnd = posInPrev + atText.length;
+  if (deleteStart < atStart || deleteStart >= atEnd) {
+    return null;
+  }
+
+  const beforeAt = prevValue.substring(0, atStart);
+  const afterAt = prevValue.substring(atEnd);
+  const residueStart = beforeAt.length;
+  const residueEnd = newValue.length - afterAt.length;
+
+  if (residueEnd <= residueStart) {
+    return null;
+  }
+
+  return newValue.substring(0, residueStart) + newValue.substring(residueEnd);
+};
+
+const handleAtMemberDelete = (
+  newValue: string,
+  prevValue: string
+): { text: string; membersToKeep: typeof selectedAtMembers.value } => {
+  if (selectedAtMembers.value.length === 0) {
+    return { text: newValue, membersToKeep: [] };
+  }
+
+  if (newValue.length >= prevValue.length) {
+    return { text: newValue, membersToKeep: selectedAtMembers.value };
+  }
+
+  let resultText = newValue;
+  const membersToKeep: typeof selectedAtMembers.value = [];
+
+  for (const member of selectedAtMembers.value) {
+    const atText = `@${member.appellation}`;
+    if (resultText.includes(atText)) {
+      membersToKeep.push(member);
+      continue;
+    }
+
+    const cleanedText = removeAtMemberResidue(member, resultText, prevValue);
+    if (cleanedText !== null) {
+      resultText = cleanedText;
+    }
+  }
+
+  return { text: resultText, membersToKeep };
+};
+
+const getInputValueFromEvent = (event): string => {
+  if (typeof event === "string") {
+    return event;
+  }
+  return event?.target?.value ?? inputText.value;
+};
+
 // 处理输入框内容变化 @相关时使用
 const handleInputChange = (event) => {
+  const value = getInputValueFromEvent(event);
+  const prevValue = prevInputText.value;
+
   // 获取当前光标位置
   if (msgInputRef.value && msgInputRef.value.inputRef) {
     cursorPosition.value = msgInputRef.value.inputRef.selectionStart || 0;
   }
 
-  // 当前输入的是@ 展示群成员列表
+  if (value.length < prevValue.length && selectedAtMembers.value.length > 0) {
+    const { text, membersToKeep } = handleAtMemberDelete(value, prevValue);
+    inputText.value = text;
+    prevInputText.value = text;
+    selectedAtMembers.value = membersToKeep;
+    return;
+  }
+
+  prevInputText.value = value;
+
   if (
-    event.data === "@" &&
-    props.conversationType ===
-      V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM
+    props.conversationType !==
+    V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM
   ) {
-    atPosition.value = cursorPosition.value - 1; // 记录@符号的位置
+    mentionPopupVisible.value = false;
+    return;
+  }
+
+  if (
+    value.length > prevValue.length &&
+    findNewAtPosition(value, prevValue) !== -1
+  ) {
+    atPosition.value = findNewAtPosition(value, prevValue);
+    cursorPosition.value = atPosition.value + 1;
     mentionPopupVisible.value = true;
     msgInputRef.value.inputRef.blur();
   } else {
@@ -366,6 +515,7 @@ const scrollBottom = () => {
 // 发送文本消息
 const handleSendTextMsg = () => {
   if (inputText.value.trim() === "") return;
+  emit("send-message");
   let text = replaceEmoji(inputText.value);
   const textMsg = proxy?.$NIM.V2NIMMessageCreator.createTextMessage(text);
   const ext = onAtMembersExtHandler();
@@ -387,6 +537,8 @@ const handleSendTextMsg = () => {
     });
 
   inputText.value = "";
+  prevInputText.value = "";
+  selectedAtMembers.value = [];
   isReplyMsg.value = false;
 };
 
@@ -441,11 +593,27 @@ const handleSendMoreVisible = () => {
 
 // 发送图片消息
 const imageInput = ref<HTMLInputElement | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
+const FILE_SIZE_LIMIT = 200 * 1024 * 1024;
 
 // 处理图片选择
 const handleSendImageMsg = () => {
   if (isTeamMute.value) return;
   imageInput.value?.click();
+};
+
+const handleSendFileMsg = () => {
+  if (isTeamMute.value) return;
+  fileInput.value?.click();
+};
+
+const isFileSizeValid = (file: File, input?: HTMLInputElement | null) => {
+  if (file.size <= FILE_SIZE_LIMIT) return true;
+  toast.info(t("fileSizeLimitText"));
+  if (input) {
+    input.value = "";
+  }
+  return false;
 };
 
 // 处理图片选择
@@ -459,9 +627,15 @@ const onImageSelected = async (event: Event) => {
     toast.info(t("selectImageText"));
     return;
   }
+  if (!isFileSizeValid(file, imageInput.value)) return;
+  emit("send-message");
 
   try {
-    const imgMsg = proxy?.$NIM.V2NIMMessageCreator.createImageMessage(file);
+    // 若图片超过 20MB，当作文件对象发送，与 React H5 保持一致。
+    const imgMsg =
+      file.size > 20 * 1024 * 1024
+        ? proxy?.$NIM.V2NIMMessageCreator.createFileMessage(file)
+        : proxy?.$NIM.V2NIMMessageCreator.createImageMessage(file);
 
     await store?.msgStore.sendMessageActive({
       msg: imgMsg as unknown as V2NIMMessage,
@@ -480,6 +654,38 @@ const onImageSelected = async (event: Event) => {
     // 清空 input 的值，这样用户可以重复选择同一个文件
     if (imageInput.value) {
       imageInput.value.value = "";
+    }
+  }
+};
+
+const onFileSelected = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+
+  if (!file) return;
+  if (!isFileSizeValid(file, fileInput.value)) return;
+  emit("send-message");
+
+  try {
+    const fileMsg = proxy?.$NIM.V2NIMMessageCreator.createFileMessage(file);
+
+    await store?.msgStore.sendMessageActive({
+      msg: fileMsg as unknown as V2NIMMessage,
+      conversationId,
+      progress: () => true,
+      sendBefore: () => {
+        scrollBottom();
+      },
+    });
+
+    scrollBottom();
+  } catch (err) {
+    scrollBottom();
+    toast.info(t("sendFileFailedText"));
+  } finally {
+    // 清空 input 的值，这样用户可以重复选择同一个文件
+    if (fileInput.value) {
+      fileInput.value.value = "";
     }
   }
 };
@@ -516,6 +722,7 @@ const handleMentionSelect = (member) => {
 
   // 更新input框的内容
   inputText.value = newInputText;
+  prevInputText.value = newInputText;
 
   handleCloseMention();
 
@@ -582,7 +789,33 @@ onMounted(() => {
     }
 
     inputText.value = msg?.oldText || "";
+    prevInputText.value = msg?.oldText || "";
+    selectedAtMembers.value = [];
     isFocus.value = true;
+
+    if (msg?.serverExtension) {
+      try {
+        const ext = JSON.parse(msg.serverExtension) as YxServerExt;
+        if (ext?.yxAitMsg) {
+          const atMembers: { accountId: string; appellation: string }[] = [];
+          for (const accountId of Object.keys(ext.yxAitMsg)) {
+            const aitInfo = ext.yxAitMsg[accountId];
+            if (aitInfo?.text) {
+              const appellation = aitInfo.text.startsWith("@")
+                ? aitInfo.text.substring(1)
+                : aitInfo.text;
+              atMembers.push({ accountId, appellation });
+            }
+          }
+
+          if (atMembers.length > 0) {
+            selectedAtMembers.value = atMembers;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
   });
   // 回复消息
   emitter.on(events.REPLY_MSG, (msg) => {
@@ -604,6 +837,7 @@ onMounted(() => {
       inputText.value + "@" + beReplyMember.appellation + " ";
     /** 更新input框的内容 */
     inputText.value = newInputText;
+    prevInputText.value = newInputText;
   });
 
   // 关闭表情、语音、发送更多面板

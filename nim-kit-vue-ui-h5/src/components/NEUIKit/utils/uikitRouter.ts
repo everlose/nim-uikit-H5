@@ -2,6 +2,7 @@
 export const neUiKitRouterPath = {
   chat: "/chat", // 聊天页面
   messageReadInfo: "/chat/message-read-info", // 消息已读信息页面
+  pinList: "/chat/pin-list", // 标记消息列表页面
   p2pSetting: "/p2p-setting", // 单聊设置页面
   conversation: "/conversation", // 会话列表页面
   conversationSearch: "/conversation/search", // 会话搜索页面
@@ -11,6 +12,7 @@ export const neUiKitRouterPath = {
   teamlist: "/contacts/teamlist", // 群组列表页面
   my: "/my", // 个人中心页面
   userSetting: "/user/setting", // 用户设置页面
+  collection: "/user/collection", // 收藏页面
   myDetail: "/user/my-detail", // 我的详情页面
   myDetailEdit: "/user/my-detail-edit", // 我的详情编辑页面
   aboutNetease: "/user/aboutNetease", // 关于网易云信页面

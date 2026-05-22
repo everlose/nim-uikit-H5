@@ -79,6 +79,7 @@ const back = () => {
   text-align: center;
   white-space: nowrap;
   font-weight: 500;
+  font-size: 17px;
 }
 
 /* 副标题 */
