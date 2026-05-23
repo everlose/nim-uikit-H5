@@ -9,8 +9,11 @@
               :account="team && team.teamId"
               :avatar="team && team.avatar"
             />
-            <div class="team-info-title team-title">
-              {{ team && team.name }}
+            <div class="team-info-content">
+              <div class="team-info-title team-title">
+                {{ team && team.name }}
+              </div>
+              <div class="team-info-id">{{ t("teamIdText") }}: {{ team.teamId }}</div>
             </div>
             <Icon iconClassName="more-icon" color="#999" type="icon-jiantou" />
           </div>
@@ -76,6 +79,10 @@
           <div>{{ t("nickInTeam") }}</div>
           <Icon iconClassName="more-icon" color="#999" type="icon-jiantou" />
         </div>
+        <div class="team-set-item team-set-item-flex" @click="goPinList">
+          <div>{{ t("pinText") }}</div>
+          <Icon iconClassName="more-icon" color="#999" type="icon-jiantou" />
+        </div>
       </div>
       <div class="team-set-card" v-if="isTeamOwner || isTeamManager">
         <div class="team-set-item team-set-item-flex">
@@ -121,7 +128,7 @@ import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import type {
   V2NIMConversationForUI,
   V2NIMLocalConversationForUI,
-} from "@xkit-yx/im-store-v2/dist/types/types";
+} from "@xkit-yx/im-store-v2/dist/types/src/types";
 import { useRouter } from "vue-router";
 import RootStore from "@xkit-yx/im-store-v2";
 import { onMounted } from "vue";
@@ -190,6 +197,15 @@ const goNickInTeam = () => {
     path: neUiKitRouterPath.teamNick,
     query: {
       teamId,
+    },
+  });
+};
+
+const goPinList = () => {
+  router.push({
+    path: neUiKitRouterPath.pinList,
+    query: {
+      conversationId: nim.V2NIMConversationIdUtil.teamConversationId(teamId),
     },
   });
 };
@@ -418,10 +434,28 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
 }
+
+.team-info-content {
+  flex: 1;
+  margin-left: 10px;
+  overflow: hidden;
+}
+
 .team-info-title {
   font-size: 16px;
-  width: 0;
-  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-info-title.team-title {
+  margin-left: 0;
+}
+
+.team-info-id {
+  font-size: 12px;
+  color: #999999;
+  margin-top: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

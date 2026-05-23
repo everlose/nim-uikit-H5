@@ -44,6 +44,15 @@
     <div
       v-else-if="
         props.lastMessage.messageType ===
+          V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM &&
+        isMergedForward
+      "
+    >
+      {{ translateMsg("chatHistoryText") }}
+    </div>
+    <div
+      v-else-if="
+        props.lastMessage.messageType ===
         V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM
       "
     >
@@ -126,6 +135,7 @@ import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import { t } from "../utils/i18n";
 import type { V2NIMLastMessage } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMConversationService";
 import { EMOJI_ICON_MAP_CONFIG, emojiRegExp } from "../utils/emoji";
+import { parseMergedForwardPayload } from "../Chat/message/merged-forward/utils";
 const props = withDefaults(
   defineProps<{
     lastMessage: V2NIMLastMessage;
@@ -143,33 +153,38 @@ const parseTextWithEmoji = (text: string) => {
   }[] = [];
   let match;
   const regexEmoji = emojiRegExp;
+  regexEmoji.lastIndex = 0;
 
+  let lastIndex = 0;
   while ((match = regexEmoji.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      const textBefore = text.slice(lastIndex, match.index);
+      if (textBefore) {
+        matches.push({
+          type: "text",
+          value: textBefore,
+          index: lastIndex,
+        });
+      }
+    }
+
     matches.push({
       type: "emoji",
       value: match[0],
       index: match.index,
     });
-    const fillText = " ".repeat(match[0].length);
-    text = text.replace(match[0], fillText);
+    lastIndex = match.index + match[0].length;
   }
 
-  text = text.replace(regexEmoji, " ");
-
-  if (text) {
-    text
-      .split(" ")
-      .filter((item) => item.trim())
-      .map((item) => {
-        const index = text?.indexOf(item);
-        matches.push({
-          type: "text",
-          value: item,
-          index,
-        });
-        const fillText = " ".repeat(item.length);
-        text = text.replace(item, fillText);
+  if (lastIndex < text.length) {
+    const remainingText = text.slice(lastIndex);
+    if (remainingText) {
+      matches.push({
+        type: "text",
+        value: remainingText,
+        index: lastIndex,
       });
+    }
   }
 
   return matches.sort((a, b) => a.index - b.index);
@@ -177,6 +192,10 @@ const parseTextWithEmoji = (text: string) => {
 
 const textArr = computed(() => {
   return parseTextWithEmoji(props.lastMessage.text as string);
+});
+
+const isMergedForward = computed(() => {
+  return !!parseMergedForwardPayload(props.lastMessage as any);
 });
 
 const translateMsg = (key: string): string => {
@@ -194,6 +213,7 @@ const translateMsg = (key: string): string => {
       robotMsgText: t("robotMsgText"),
       tipMsgText: t("tipMsgText"),
       unknowMsgText: t("unknowMsgText"),
+      chatHistoryText: t("chatHistoryText"),
     }[key] || "";
   return `[${text}]`;
 };
@@ -215,6 +235,11 @@ const translateMsg = (key: string): string => {
   line-height: 22px;
   width: 100%;
   display: inline;
+  margin-right: 4px;
+}
+
+.msg-conversation-text:last-child {
+  margin-right: 0;
 }
 
 .msg-conversation-text-wrap {

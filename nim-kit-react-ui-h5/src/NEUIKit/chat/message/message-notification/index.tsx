@@ -5,7 +5,7 @@ import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { ALLOW_AT } from '@/NEUIKit/common/utils/constants'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
 import type { V2NIMTeam } from 'nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService'
-import type { V2NIMMessageForUI, YxServerExt } from '@xkit-yx/im-store-v2/dist/types/types'
+import type { V2NIMMessageForUI, YxServerExt } from '@xkit-yx/im-store-v2/dist/types/src/types'
 import type { V2NIMMessageNotificationAttachment } from 'nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService'
 import './index.less'
 

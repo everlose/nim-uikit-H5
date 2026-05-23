@@ -9,9 +9,10 @@ import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { toast } from '@/NEUIKit/common/utils/toast'
 import { neUiKitRouterPath } from '@/NEUIKit/common/utils/uikitRouter'
-import type { V2NIMConversationForUI, V2NIMLocalConversationForUI } from '@xkit-yx/im-store-v2/dist/types/types'
+import type { V2NIMConversationForUI, V2NIMLocalConversationForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
 import './index.less'
 import { useEventTracking } from '@/NEUIKit/common/hooks/useEventTracking'
+import { clearVoiceTextCache } from '@/NEUIKit/chat/voiceTextCache'
 
 /**
  * 会话列表组件
@@ -34,6 +35,7 @@ const ConversationList: React.FC = observer(() => {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    clearVoiceTextCache()
     // 初始化不选中任何会话
     setCurrentMoveSessionId('')
   }, [])
@@ -205,11 +207,10 @@ const ConversationList: React.FC = observer(() => {
         </div>
       </div>
 
-      <div className="block"></div>
       <NetworkAlert />
 
       {!conversationList || conversationList.length === 0 ? (
-        <div>
+        <div className="conversation-list-wrapper">
           {renderSearchBar()}
           <Empty text={t('conversationEmptyText')} />
         </div>

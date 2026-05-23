@@ -1,4 +1,16 @@
 .user-info-wrapper {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  .user-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    background-color: #fff;
+  }
+
   .user-container {
     width: 100%;
     height: 100%;

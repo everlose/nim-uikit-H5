@@ -5,6 +5,7 @@ import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
 import type { V2NIMLastMessage } from 'nim-web-sdk-ng/dist/esm/nim/src/V2NIMConversationService'
 import { EMOJI_ICON_MAP_CONFIG, emojiRegExp } from '@/NEUIKit/common/utils/emoji'
+import { parseMergedForwardPayload } from '@/NEUIKit/chat/message/merged-forward/utils'
 import './conversation-item-last-msg-content.less'
 
 interface LastMsgContentProps {
@@ -123,6 +124,9 @@ const LastMsgContent: React.FC<LastMsgContentProps> = observer(({ lastMessage })
       return <div>{translateMsg('imgMsgText')}</div>
 
     case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM:
+      if (parseMergedForwardPayload(lastMessage as any)) {
+        return <div>{`[${t('chatHistoryText')}]`}</div>
+      }
       return <div>{lastMessage.text || translateMsg('customMsgText')}</div>
 
     case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO:

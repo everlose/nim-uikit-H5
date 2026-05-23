@@ -6,18 +6,18 @@
   z-index: 9999;
   color: #000;
 
-  /* 标题容器 */
+  /* 标题容器 - 整体居中 */
   .title-container {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    width: 230px;
+    max-width: 230px;
     display: flex;
     justify-content: center;
     align-items: center;
   }
 
-  /* 主标题 */
+  /* 主标题 - 可被截断 */
   .title {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -25,11 +25,19 @@
     white-space: nowrap;
     font-weight: 500;
     font-size: 16px;
+    flex-shrink: 1;  /* 允许收缩 */
+    min-width: 0;    /* 允许收缩到 0 */
   }
 
   /* 副标题 */
   .subTitle {
     white-space: nowrap;
     font-weight: 500;
+  }
+
+  /* iconContent 容器 - 状态文字，不可截断 */
+  .title-container > *:last-child:not(.title):not(.subTitle) {
+    flex-shrink: 0;  /* 不收缩 */
+    white-space: nowrap;
   }
 }

@@ -1,3 +1,5 @@
+import BMF from 'browser-md5-file'
+
 /**
  * 秒转换为时分秒
  */
@@ -106,6 +108,29 @@ export const EMOJI_ICON_MAP_CONFIG: IKeyMap = {
   '[火箭]': 'icon-a-67',
   '[救护车]': 'icon-a-68',
   '[便便]': 'icon-a-70'
+}
+
+/**
+ * 获取文件 MD5
+ */
+export const getFileMd5 = async (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const bmf = new BMF()
+
+    try {
+      bmf.md5(file, (err: unknown, md5: string) => {
+        if (err === 'aborted') {
+          reject('md5 calculate aborted')
+        } else if (err) {
+          reject(`md5 calculate error: ${err}`)
+        } else {
+          resolve(md5)
+        }
+      })
+    } catch {
+      reject('md5 calculate error: file is empty')
+    }
+  })
 }
 
 export function replaceEmoji(text: string, emojiMap?: string[]) {

@@ -115,7 +115,7 @@ import Avatar from "../../CommonComponents/Avatar.vue";
 import NavBar from "../../CommonComponents/NavBar.vue";
 import Icon from "../../CommonComponents/Icon.vue";
 import { t } from "../../utils/i18n";
-import type { V2NIMFriendAddApplicationForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMFriendAddApplicationForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import Appellation from "../../CommonComponents/Appellation.vue";
 import type { V2NIMMessage } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";

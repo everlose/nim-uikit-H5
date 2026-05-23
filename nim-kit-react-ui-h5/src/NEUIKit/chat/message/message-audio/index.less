@@ -15,10 +15,40 @@
 
 .audio-in {
   flex-direction: row-reverse;
+  
+  // 对方发送的语音消息，图标水平翻转
+  .audio-icon-wrapper {
+    transform: scaleX(-1);
+  }
 }
 
 .audio-icon-wrapper {
   height: 24px;
   display: flex;
   align-items: center;
+}
+
+// 语音消息容器（支持展示转换文字）
+.message-audio-container {
+  display: flex;
+  flex-direction: column;
+}
+
+// 语音转文字展示区域
+.voice-text-container {
+  margin-top: 4px;
+  
+  .voice-text-divider {
+    height: 1px;
+    background-color: rgba(0, 0, 0, 0.1);
+    margin-bottom: 8px;
+  }
+  
+  .voice-text-content {
+    font-size: 14px;
+    line-height: 20px;
+    color: #333;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
 }

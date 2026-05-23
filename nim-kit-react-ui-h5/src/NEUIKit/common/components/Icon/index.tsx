@@ -156,6 +156,8 @@ import IconGreenPin from '../../../static/green-pin.png'
 import IconChoosePicture from '../../../static/choose-picture.png'
 import IconCollection from '../../../static/icons/add-collection.png'
 import IconBlueCollection from '../../../static/icons/collection.png'
+import IconVoiceToText from '../../../static/icons/icon-voice-to-text.png'
+import IconMultiSelect from '../../../static/icons/icon-multi-select.svg'
 
 // 图标映射表
 const urlMap: Record<string, string> = {
@@ -312,7 +314,9 @@ const urlMap: Record<string, string> = {
   'icon-green-pin': IconGreenPin,
   'choose-picture': IconChoosePicture,
   'icon-collection': IconCollection,
-  'blue-collection': IconBlueCollection
+  'blue-collection': IconBlueCollection,
+  'icon-voice-to-text': IconVoiceToText,
+  'icon-multi-select': IconMultiSelect
 }
 
 export interface IconProps {

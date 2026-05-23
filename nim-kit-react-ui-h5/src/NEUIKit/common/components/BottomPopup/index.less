@@ -29,16 +29,51 @@
 }
 
 .nim-popup-header {
+  position: relative;
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  padding: 16px;
+  height: 52px;
+  padding: 0 16px;
   border-bottom: 1px solid #eee;
+  box-sizing: border-box;
 }
 
 .nim-cancel-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #999;
-  font-size: 16px;
   cursor: pointer;
+
+  img {
+    transform: rotate(90deg);
+  }
+}
+
+.nim-popup-title {
+  position: absolute;
+  left: 50%;
+  max-width: 220px;
+  transform: translateX(-50%);
+  overflow: hidden;
+  color: #222;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 22px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nim-popup-header-placeholder {
+  width: 40px;
+  height: 40px;
 }
 
 .nim-confirm-btn {

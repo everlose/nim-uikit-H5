@@ -2,23 +2,24 @@ import React, { useMemo } from 'react'
 import Icon from '@/NEUIKit/common/components/Icon'
 import { parseText } from '@/NEUIKit/common/utils/parseText'
 import { EMOJI_ICON_MAP_CONFIG } from '@/NEUIKit/common/utils/emoji'
-import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/types'
+import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
 import './index.less'
 
 interface MessageTextProps {
   msg: V2NIMMessageForUI
   fontSize?: number
+  disableAit?: boolean
 }
 
 /**
  * 文本消息组件
  * 支持文本、@、表情和链接混排显示
  */
-const MessageText: React.FC<MessageTextProps> = ({ msg, fontSize = 16 }) => {
+const MessageText: React.FC<MessageTextProps> = ({ msg, fontSize = 16, disableAit = false }) => {
   // 解析文本
   const textArr = useMemo(() => {
-    return parseText(msg?.text || '', msg?.serverExtension)
-  }, [msg?.serverExtension, msg?.text])
+    return parseText(msg?.text || '', disableAit ? undefined : msg?.serverExtension)
+  }, [disableAit, msg?.serverExtension, msg?.text])
 
   return (
     <div className="msg-text" style={{ fontSize: `${fontSize}px` }}>

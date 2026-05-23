@@ -24,6 +24,12 @@ const router = createRouter({
       component: () => import("../views/chat/MessageReadInfoPage.vue"),
     },
     {
+      // 标记消息列表页面路由
+      path: neUiKitRouterPath.pinList,
+      name: "PinList",
+      component: () => import("../views/chat/PinListPage.vue"),
+    },
+    {
       // 单聊设置页面路由
       path: neUiKitRouterPath.p2pSetting,
       name: "P2pSetting",
@@ -79,6 +85,12 @@ const router = createRouter({
       component: () => import("../views/user/SettingPage.vue"),
     },
     {
+      // 收藏页面路由
+      path: neUiKitRouterPath.collection,
+      name: "Collection",
+      component: () => import("../views/user/CollectionPage.vue"),
+    },
+    {
       // 我的详情页面路由
       path: neUiKitRouterPath.myDetail,
       name: "MyDetail",
@@ -116,7 +128,7 @@ const router = createRouter({
     },
     {
       // 创建群组页面路由
-      path: "/team/create",
+      path: neUiKitRouterPath.teamCreate,
       name: "TeamCreate",
       component: () => import("../views/team/TeamCreatePage.vue"),
     },

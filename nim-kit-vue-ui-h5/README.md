@@ -1,6 +1,44 @@
-## 运行 demo
+# im-kit-vue-ui-h5
 
-- [创建应用并获取 AppKey](https://doc.yunxin.163.com/console/docs/TIzMDE4NTA?platform=console)
-- [注册云信账号，获取 account、token](https://doc.yunxin.163.com/messaging/docs/DQ3Nzk1MTY?platform=server)
-- `执行 npm install 安装依赖 && 在 nim-kit-vue-ui-h5 项目的 App.vue 的 initIMUIKit 方法中填入 appkey、account 和 token，最后使用 npm run dev 启动项目`
+This template should help get you started developing with Vue 3 in Vite.
 
+## Recommended IDE Setup
+
+[VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+
+## Type Support for `.vue` Imports in TS
+
+TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
+
+## Customize configuration
+
+See [Vite Configuration Reference](https://vite.dev/config/).
+
+## 环境配置
+
+启动或构建前，需要从 `.env.example` 复制出本地开发和生产环境配置文件：
+
+```sh
+cp .env.example .env.local
+cp .env.example .env.production
+```
+
+按实际环境填写 `.env.local` 和 `.env.production` 中的配置项。
+
+## Project Setup
+
+```sh
+npm install
+```
+
+### Compile and Hot-Reload for Development
+
+```sh
+npm run dev
+```
+
+### Type-Check, Compile and Minify for Production
+
+```sh
+npm run build
+```

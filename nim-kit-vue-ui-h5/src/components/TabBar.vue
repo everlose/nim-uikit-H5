@@ -84,15 +84,12 @@ onMounted(() => {
 
 <style scoped>
 .tabbar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  flex: 0 0 60px;
   height: 60px;
   display: flex;
   background-color: #fff;
   border-top: 1px solid #eee;
-  z-index: 999;
+  z-index: 1;
 }
 
 .tab-item {

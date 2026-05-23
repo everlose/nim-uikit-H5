@@ -14,11 +14,13 @@ const MyDetailPage = lazy(() => import('./pages/user/myDetail'))
 const MyDetailEditPage = lazy(() => import('./pages/user/myDetailEdit'))
 const AboutNeteasePage = lazy(() => import('./pages/user/aboutNetease'))
 const SettingPage = lazy(() => import('./pages/user/setting'))
+const CollectionPage = lazy(() => import('./pages/user/collection'))
 const FriendCardPage = lazy(() => import('./pages/friend/friendCard'))
 const FriendAddPage = lazy(() => import('./pages/friend/add'))
 const FriendEditPage = lazy(() => import('./pages/friend/edit'))
 const ChatPage = lazy(() => import('./pages/chat'))
 const MessageReadInfoPage = lazy(() => import('./pages/chat/messageReadInfo'))
+const PinListPage = lazy(() => import('./pages/chat/pinList'))
 const P2PSettingPage = lazy(() => import('./pages/chat/p2pSetting'))
 const TeamCreatePage = lazy(() => import('./pages/team/teamCreate'))
 const TeamAddPage = lazy(() => import('./pages/team/teamAdd'))
@@ -44,11 +46,13 @@ export const routes: RouteObject[] = [
   { path: 'user/my-detail-edit', element: <MyDetailEditPage /> },
   { path: 'user/aboutNetease', element: <AboutNeteasePage /> },
   { path: 'user/setting', element: <SettingPage /> },
+  { path: 'user/collection', element: <CollectionPage /> },
   { path: 'friend/friend-card', element: <FriendCardPage /> },
   { path: 'friend/add', element: <FriendAddPage /> },
   { path: 'friend/edit', element: <FriendEditPage /> },
   { path: 'chat', element: <ChatPage /> },
   { path: 'chat/message-read-info', element: <MessageReadInfoPage /> },
+  { path: 'chat/pin-list', element: <PinListPage /> },
   { path: 'p2p-setting', element: <P2PSettingPage /> },
   { path: 'team/create', element: <TeamCreatePage /> },
   { path: 'team/add', element: <TeamAddPage /> },

@@ -17,7 +17,17 @@
           <div class="dot" v-if="isMute"></div>
           <div class="badge" v-else>{{ unread }}</div>
         </div>
-        <Avatar :account="to" :avatar="teamAvatar" />
+        <!-- P2P 单聊展示在线状态 -->
+        <AvatarWithStatus
+          v-if="conversation.type === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P"
+          :account="to"
+        />
+        <!-- 群聊不展示在线状态 -->
+        <Avatar
+          v-else
+          :account="to"
+          :avatar="teamAvatar"
+        />
       </div>
       <div class="conversation-item-right">
         <div class="conversation-item-top">
@@ -76,6 +86,7 @@
 
 <script lang="ts" setup>
 import Avatar from "../CommonComponents/Avatar.vue";
+import AvatarWithStatus from "../CommonComponents/AvatarWithStatus.vue";
 import Appellation from "../CommonComponents/Appellation.vue";
 import Icon from "../CommonComponents/Icon.vue";
 import { computed, onUpdated, getCurrentInstance } from "vue";
@@ -85,7 +96,7 @@ import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import type {
   V2NIMConversationForUI,
   V2NIMLocalConversationForUI,
-} from "@xkit-yx/im-store-v2/dist/types/types";
+} from "@xkit-yx/im-store-v2/dist/types/src/types";
 import ConversationItemIsRead from "./conversation-item-read.vue";
 import LastMsgContent from "./conversation-item-last-msg-content.vue";
 const props = withDefaults(
@@ -181,7 +192,30 @@ const isMute = computed(() => {
 });
 
 const beMentioned = computed(() => {
-  return !!props.conversation.aitMsgs?.length;
+  if (props.conversation.aitMsgs?.length) {
+    return true;
+  }
+
+  if (props.conversation.unreadCount === 0) {
+    return false;
+  }
+
+  const lastMsg = props.conversation.lastMessage;
+  if (!lastMsg?.serverExtension) {
+    return false;
+  }
+
+  try {
+    const ext = JSON.parse(lastMsg.serverExtension);
+    if (!ext?.yxAitMsg) {
+      return false;
+    }
+
+    const myAccountId = proxy?.$NIM.V2NIMLoginService.getLoginUser();
+    return myAccountId in ext.yxAitMsg || "ait_all" in ext.yxAitMsg;
+  } catch {
+    return false;
+  }
 });
 
 const showSessionUnread = computed(() => {
@@ -260,6 +294,7 @@ onUpdated(() => {
 
 .beMentioned {
   color: #ff4d4f;
+  margin-right: 4px;
 }
 
 .content {

@@ -32,8 +32,8 @@
       </div>
     </div>
     <div class="description">
-      {{ "[" + t("forwardText") + "]" }}
-      {{ forwardFromNick }}
+      {{ "[" + t(forwardModeTextKey) + "]" }}
+      {{ forwardSourceName }}
       {{ t("sessionRecordText") }}
     </div>
     <Input
@@ -50,7 +50,7 @@ import { t } from "../../utils/i18n";
 import { ref, computed, getCurrentInstance } from "vue";
 import Modal from "../../CommonComponents/Modal.vue";
 import Avatar from "../../CommonComponents/Avatar.vue";
-import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import Input from "../../CommonComponents/Input.vue";
 interface ForwardToTeamInfo {
@@ -64,10 +64,17 @@ const props = withDefaults(
     forwardModalVisible: boolean;
     forwardTo: string;
     forwardMsg: V2NIMMessageForUI | undefined;
+    sourceConversationId?: string;
     forwardConversationType: V2NIMConst.V2NIMConversationType;
     forwardToTeamInfo?: ForwardToTeamInfo;
+    isOneByOneForward?: boolean;
+    forwardMode?: "normal" | "oneByOne" | "merged";
   }>(),
-  {}
+  {
+    sourceConversationId: "",
+    isOneByOneForward: false,
+    forwardMode: "normal",
+  }
 );
 
 const emit = defineEmits(["confirm", "cancel"]);
@@ -88,6 +95,15 @@ const handleConfirm = () => {
   emit("confirm", forwardComment.value);
 };
 
+const forwardModeTextKey = computed(() => {
+  if (props.forwardMode === "merged") {
+    return "mergedForwardText";
+  }
+  return props.forwardMode === "oneByOne" || props.isOneByOneForward
+    ? "oneByOneForwardText"
+    : "forwardText";
+});
+
 // 转发消息的接收方昵称
 const forwardToNick = computed(() => {
   return proxy?.$UIKitStore.uiStore.getAppellation({
@@ -95,11 +111,34 @@ const forwardToNick = computed(() => {
   });
 });
 
-// 转发消息的发送方昵称
-const forwardFromNick = computed(() => {
-  return proxy?.$UIKitStore.uiStore.getAppellation({
-    account: props.forwardMsg?.senderId as string,
-  });
+// 转发消息所属会话名称
+const forwardSourceName = computed(() => {
+  const conversationId = props.sourceConversationId || props.forwardMsg?.conversationId;
+  if (!conversationId) {
+    return "";
+  }
+
+  const conversationType =
+    proxy?.$NIM.V2NIMConversationIdUtil.parseConversationType(
+      conversationId
+    ) as unknown as V2NIMConst.V2NIMConversationType;
+  const targetId =
+    proxy?.$NIM.V2NIMConversationIdUtil.parseConversationTargetId(
+      conversationId
+    );
+
+  if (
+    conversationType ===
+    V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM
+  ) {
+    return proxy?.$UIKitStore.teamStore.teams.get(targetId)?.name || targetId;
+  }
+
+  return (
+    proxy?.$UIKitStore.uiStore.getAppellation({
+      account: targetId,
+    }) || targetId
+  );
 });
 </script>
 

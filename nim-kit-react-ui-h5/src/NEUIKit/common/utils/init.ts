@@ -2,7 +2,7 @@ import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import RootStore from "@xkit-yx/im-store-v2";
 import V2NIM from "nim-web-sdk-ng/dist/v2/NIM_BROWSER_SDK";
 import type { V2NIMMessage } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
-import type { LocalOptions } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { LocalOptions } from "@xkit-yx/im-store-v2/dist/types/src/types";
 
 export const defaultLocalOptions: LocalOptions = {
   // 添加好友是否需要验证
@@ -14,6 +14,10 @@ export const defaultLocalOptions: LocalOptions = {
   // 群组被邀请模式，默认需要验证
   teamAgreeMode:
     V2NIMConst.V2NIMTeamAgreeMode.V2NIM_TEAM_AGREE_MODE_NO_AUTH,
+  // 是否开启机器人功能，关闭后 store 不主动拉取 AI bot 列表
+  aiBotsVisible: false,
+  aiVisible: false,
+  aiStream: false
 }
 
 export const init = () => {

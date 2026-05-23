@@ -1,12 +1,11 @@
-// const baseUrl = 'https://yiyong-user-center-qa.netease.im'
-const baseUrl = "https://yiyong-user-center.netease.im";
-// // @ts-ignore
-// BUILD_ENV === 'prod'
-//   ? 'https://yiyong-user-center.netease.im/'
-//   : 'https://yiyong-user-center-qa.netease.im'
+// 从环境变量读取配置
+// baseUrl: 默认值在 .env 中定义，可在 .env.local 中覆盖
+// appKey: 必须在 .env.local 中配置（npm run dev 会检查）
+const baseUrl = import.meta.env.VITE_USER_CENTER_BASE_URL || 'https://yiyong-user-center-qa.netease.im'
+const appKey = import.meta.env.VITE_NIM_APP_KEY || ''
 
 const loginByCodeHeader = {
-  appKey: "",
+  appKey,
   parentScope: 2,
   scope: 7,
 };

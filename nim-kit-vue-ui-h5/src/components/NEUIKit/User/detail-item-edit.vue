@@ -65,7 +65,7 @@ onMounted(() => {
       inputValue.value = _value as string;
       // 如果昵称没有值，则默认显示账号
       if (key.value === "name" && !_value) {
-        inputValue.value = myUserInfo.value?.accountId;
+        inputValue.value = myUserInfo.value?.accountId || "";
       }
     }
   });

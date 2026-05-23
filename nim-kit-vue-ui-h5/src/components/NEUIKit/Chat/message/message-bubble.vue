@@ -1,13 +1,17 @@
 <template>
   <!-- 收到的消息 -->
   <Tooltip
-    v-if="!props.msg.isSelf"
+    v-if="!props.readonly && !props.msg.isSelf && !props.isMultiSelecting"
     :placement="placement"
     ref="tooltipRef"
     color="white"
   >
     <template #content>
-      <div class="msg-action-groups" v-if="!isUnknownMsg">
+      <div
+        class="msg-action-groups"
+        v-if="!isUnknownMsg"
+        :style="actionGroupStyle(normalActionCount)"
+      >
         <div
           class="msg-action-btn"
           v-if="
@@ -68,9 +72,59 @@
           ></Icon>
           <text class="msg-action-btn-text">{{ t("deleteText") }}</text>
         </div>
+        <div class="msg-action-btn" @click="handleMultiSelect">
+          <Icon
+            :size="18"
+            color="#656A72"
+            class="msg-action-btn-icon"
+            type="icon-multi-select"
+          ></Icon>
+          <text class="msg-action-btn-text">{{ t("multiSelectText") }}</text>
+        </div>
+        <div
+          v-if="isUnconvertedVoiceMsg"
+          class="msg-action-btn"
+          @click="handleVoiceToText"
+        >
+          <Icon
+            :size="18"
+            color="#656A72"
+            class="msg-action-btn-icon"
+            type="icon-voice-to-text"
+          ></Icon>
+          <text class="msg-action-btn-text">{{ t("voiceToTextText") }}</text>
+        </div>
+        <div
+          v-if="canPinMsg"
+          class="msg-action-btn"
+          @click="handlePinMsg"
+        >
+          <Icon
+            :size="18"
+            color="#656A72"
+            class="msg-action-btn-icon"
+            type="icon-pin"
+          ></Icon>
+          <text class="msg-action-btn-text">{{
+            pinned ? t("unpinText") : t("pinText")
+          }}</text>
+        </div>
+        <div
+          v-if="canCollectMsg"
+          class="msg-action-btn"
+          @click="handleCollectMsg"
+        >
+          <Icon
+            :size="18"
+            color="#656A72"
+            class="msg-action-btn-icon"
+            type="icon-collection"
+          ></Icon>
+          <text class="msg-action-btn-text">{{ t("collectionText") }}</text>
+        </div>
       </div>
       <!-- 未知消息体 -->
-      <div class="msg-action-groups-unknown" v-else>
+      <div class="msg-action-groups-unknown" v-else :style="actionGroupStyle(2)">
         <div class="msg-action-btn" @click="handleDeleteMsg">
           <Icon
             :size="18"
@@ -80,13 +134,28 @@
           ></Icon>
           <text class="msg-action-btn-text">{{ t("deleteText") }}</text>
         </div>
+        <div class="msg-action-btn" @click="handleMultiSelect">
+          <Icon
+            :size="18"
+            color="#656A72"
+            class="msg-action-btn-icon"
+            type="icon-multi-select"
+          ></Icon>
+          <text class="msg-action-btn-text">{{ t("multiSelectText") }}</text>
+        </div>
       </div>
     </template>
-    <div v-if="bgVisible" class="msg-bg msg-bg-in">
+    <div v-if="bgVisible" :class="getBubbleClass('msg-bg-in')">
       <slot></slot>
     </div>
     <slot v-else></slot>
   </Tooltip>
+  <template v-else-if="!props.msg.isSelf">
+    <div v-if="bgVisible" :class="getBubbleClass('msg-bg-in')">
+      <slot></slot>
+    </div>
+    <slot v-else></slot>
+  </template>
   <!-- 消息发送中 -->
   <div
     v-else-if="
@@ -102,13 +171,24 @@
       type="icon-a-Frame8"
     ></Icon>
     <Tooltip
+      v-if="!props.readonly && !props.isMultiSelecting"
       :placement="placement"
       ref="tooltipRef"
       color="white"
       :align="props.msg.isSelf"
     >
       <template #content>
-        <div class="msg-action-groups">
+        <div
+          class="msg-action-groups"
+          :style="
+            actionGroupStyle(
+              props.msg.messageType ===
+                V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT
+                ? 2
+                : 1
+            )
+          "
+        >
           <div
             class="msg-action-btn"
             v-if="
@@ -136,11 +216,17 @@
           </div>
         </div>
       </template>
-      <div v-if="bgVisible" class="msg-bg msg-bg-out">
+      <div v-if="bgVisible" :class="getBubbleClass('msg-bg-out')">
         <slot></slot>
       </div>
       <slot v-else></slot>
     </Tooltip>
+    <template v-else>
+      <div v-if="bgVisible" :class="getBubbleClass('msg-bg-out')">
+        <slot></slot>
+      </div>
+      <slot v-else></slot>
+    </template>
   </div>
   <!-- 消息发送失败 -->
   <div
@@ -148,8 +234,7 @@
       props.msg.sendingState ===
         V2NIMConst.V2NIMMessageSendingState
           .V2NIM_MESSAGE_SENDING_STATE_FAILED ||
-      props.msg.messageStatus.errorCode === 102426 ||
-      props.msg.messageStatus.errorCode === 104404
+      isMessageStatusFailed
     "
     class="msg-failed-wrapper"
   >
@@ -158,6 +243,7 @@
         <div class="icon-fail">!</div>
       </div>
       <Tooltip
+        v-if="!props.readonly && !props.isMultiSelecting"
         :placement="placement"
         ref="tooltipRef"
         color="white"
@@ -166,13 +252,14 @@
         <template #content>
           <div
             class="msg-action-groups"
-            :style="{
-              width:
+            :style="
+              actionGroupStyle(
                 props.msg.messageType ===
-                V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT
-                  ? '112px'
-                  : '56px',
-            }"
+                  V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT
+                  ? 2
+                  : 1
+              )
+            "
           >
             <div
               class="msg-action-btn"
@@ -201,21 +288,27 @@
             </div>
           </div>
         </template>
-        <div v-if="bgVisible" class="msg-bg msg-bg-out">
+        <div v-if="bgVisible" :class="getBubbleClass('msg-bg-out')">
           <slot></slot>
         </div>
         <slot v-else></slot>
       </Tooltip>
+      <template v-else>
+        <div v-if="bgVisible" :class="getBubbleClass('msg-bg-out')">
+          <slot></slot>
+        </div>
+        <slot v-else></slot>
+      </template>
     </div>
     <div
       class="in-blacklist"
-      v-if="props.msg.messageStatus.errorCode === 102426"
+      v-if="props.msg.messageStatus?.errorCode === 102426"
     >
       {{ t("sendFailWithInBlackText") }}
     </div>
     <div
       class="friend-delete"
-      v-else-if="props.msg.messageStatus.errorCode === 104404"
+      v-else-if="props.msg.messageStatus?.errorCode === 104404"
     >
       {{ t("sendFailWithDeleteText") }}
       <span @click="addFriend" class="friend-verification">{{
@@ -225,14 +318,18 @@
   </div>
   <!-- 发出的消息 -->
   <Tooltip
-    v-else-if="tooltipVisible"
+    v-else-if="tooltipVisible && !props.readonly && !props.isMultiSelecting"
     :placement="placement"
     ref="tooltipRef"
     color="white"
     :align="props.msg.isSelf"
   >
     <template #content>
-      <div class="msg-action-groups" v-if="!isUnknownMsg">
+      <div
+        class="msg-action-groups"
+        v-if="!isUnknownMsg"
+        :style="actionGroupStyle(normalActionCount)"
+      >
         <div
           class="msg-action-btn"
           v-if="
@@ -302,9 +399,59 @@
           ></Icon>
           <text class="msg-action-btn-text">{{ t("recallText") }}</text>
         </div>
+        <div class="msg-action-btn" @click="handleMultiSelect">
+          <Icon
+            :size="18"
+            color="#656A72"
+            class="msg-action-btn-icon"
+            type="icon-multi-select"
+          ></Icon>
+          <text class="msg-action-btn-text">{{ t("multiSelectText") }}</text>
+        </div>
+        <div
+          v-if="isUnconvertedVoiceMsg"
+          class="msg-action-btn"
+          @click="handleVoiceToText"
+        >
+          <Icon
+            :size="18"
+            color="#656A72"
+            class="msg-action-btn-icon"
+            type="icon-voice-to-text"
+          ></Icon>
+          <text class="msg-action-btn-text">{{ t("voiceToTextText") }}</text>
+        </div>
+        <div
+          v-if="canPinMsg"
+          class="msg-action-btn"
+          @click="handlePinMsg"
+        >
+          <Icon
+            :size="18"
+            color="#656A72"
+            class="msg-action-btn-icon"
+            type="icon-pin"
+          ></Icon>
+          <text class="msg-action-btn-text">{{
+            pinned ? t("unpinText") : t("pinText")
+          }}</text>
+        </div>
+        <div
+          v-if="canCollectMsg"
+          class="msg-action-btn"
+          @click="handleCollectMsg"
+        >
+          <Icon
+            :size="18"
+            color="#656A72"
+            class="msg-action-btn-icon"
+            type="icon-collection"
+          ></Icon>
+          <text class="msg-action-btn-text">{{ t("collectionText") }}</text>
+        </div>
       </div>
       <!-- 未知消息体 -->
-      <div class="msg-action-groups-unknown" v-else>
+      <div class="msg-action-groups-unknown" v-else :style="actionGroupStyle(2)">
         <div class="msg-action-btn" @click="handleDeleteMsg">
           <Icon
             :size="18"
@@ -314,13 +461,28 @@
           ></Icon>
           <text class="msg-action-btn-text">{{ t("deleteText") }}</text>
         </div>
+        <div class="msg-action-btn" @click="handleMultiSelect">
+          <Icon
+            :size="18"
+            color="#656A72"
+            class="msg-action-btn-icon"
+            type="icon-multi-select"
+          ></Icon>
+          <text class="msg-action-btn-text">{{ t("multiSelectText") }}</text>
+        </div>
       </div>
     </template>
-    <div v-if="bgVisible" class="msg-bg msg-bg-out">
+    <div v-if="bgVisible" :class="getBubbleClass('msg-bg-out')">
       <slot></slot>
     </div>
     <slot v-else></slot>
   </Tooltip>
+  <template v-else>
+    <div v-if="bgVisible" :class="getBubbleClass(props.msg.isSelf ? 'msg-bg-out' : 'msg-bg-in')">
+      <slot></slot>
+    </div>
+    <slot v-else></slot>
+  </template>
 
   <MessageForward
     v-model="showForward"
@@ -330,14 +492,14 @@
 </template>
 
 <script lang="ts" setup>
-import { onMounted, onUnmounted, ref, getCurrentInstance } from "vue";
+import { computed, onMounted, onUnmounted, ref, getCurrentInstance } from "vue";
 //@ts-ignore
 import Tooltip from "../../CommonComponents/Tooltip.vue";
 import Icon from "../../CommonComponents/Icon.vue";
 import { events } from "../../utils/constants";
 import { neUiKitRouterPath } from "../../utils/uikitRouter";
 import { autorun } from "mobx";
-import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import { msgRecallTime } from "../../utils/constants";
 import { t } from "../../utils/i18n";
@@ -347,6 +509,17 @@ import MessageForward from "./message-forward.vue";
 import { showModal } from "../../utils/modal";
 import { showToast } from "../../utils/toast";
 import router from "@/router";
+import {
+  canOperatePin,
+  getMessageRefer,
+  isMessagePinned,
+} from "../message-pin/utils";
+import {
+  canCollectMessage,
+  createMessageCollectionParams,
+  getMessageCollectionConverter,
+  isCollectionLimitError,
+} from "../../utils/collection";
 const tooltipRef = ref(null);
 
 const props = withDefaults(
@@ -355,15 +528,26 @@ const props = withDefaults(
     tooltipVisible?: boolean;
     bgVisible?: boolean;
     placement?: string;
+    voiceTextMap?: Record<string, string>;
+    setVoiceText?: (messageClientId: string, text: string) => void;
+    isMultiSelecting?: boolean;
+    onMultiSelect?: (msg: V2NIMMessageForUI) => void;
+    readonly?: boolean;
   }>(),
-  {}
+  {
+    isMultiSelecting: false,
+    readonly: false,
+  }
 );
 
 const { proxy } = getCurrentInstance()!; // 获取组件实例
 
 const store = proxy?.$UIKitStore;
+const nim = proxy?.$NIM;
+const isMountedRef = ref(false);
 
 onMounted(() => {
+  isMountedRef.value = true;
   // 当前版本仅支持文本、图片、文件、语音、视频 话单消息，其他消息类型统一为未知消息
   isUnknownMsg.value = !(
     props.msg.messageType ==
@@ -376,7 +560,8 @@ onMounted(() => {
       V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO ||
     props.msg.messageType ==
       V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_VIDEO ||
-    props.msg.messageType == V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CALL
+    props.msg.messageType == V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CALL ||
+    store?.msgStore.isChatMergedForwardMsg(props.msg)
   );
 });
 // 是否是好友
@@ -384,6 +569,67 @@ const isFriend = ref(true);
 
 // 未知消息
 const isUnknownMsg = ref(false);
+const pinned = computed(() => isMessagePinned(props.msg));
+const canPinMsg = computed(() => canOperatePin(props.msg));
+const canCollectMsg = computed(() => canCollectMessage(props.msg));
+const messageStatusErrorCode = computed(() => props.msg.messageStatus?.errorCode);
+const isMessageStatusFailed = computed(
+  () =>
+    messageStatusErrorCode.value !== undefined &&
+    messageStatusErrorCode.value !== 200
+);
+const isImageMsg = computed(
+  () =>
+    props.msg.messageType ===
+    V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_IMAGE
+);
+const getBubbleClass = (directionClass: string) => [
+  "msg-bg",
+  directionClass,
+  {
+    "msg-bg-image": isImageMsg.value,
+  },
+];
+const normalActionCount = computed(() => {
+  let count = 1;
+  if (
+    props.msg.messageType ===
+    V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT
+  ) {
+    count += 1;
+  }
+  if (
+    props.msg.messageType !==
+    V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CALL
+  ) {
+    count += 1;
+  }
+  if (
+    props.msg.messageType !==
+      V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO &&
+    props.msg.messageType !==
+      V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CALL
+  ) {
+    count += 1;
+  }
+  if (props.msg.isSelf) {
+    count += 1;
+  }
+  if (isUnconvertedVoiceMsg.value) {
+    count += 1;
+  }
+  if (canPinMsg.value) {
+    count += 1;
+  }
+  if (canCollectMsg.value) {
+    count += 1;
+  }
+  return count;
+});
+
+const actionGroupStyle = (count: number) => ({
+  "--action-columns": Math.max(1, Math.min(count, 4)),
+});
 
 const closeTooltip = () => {
   // @ts-ignore
@@ -429,6 +675,7 @@ const handleResendMsg = async () => {
     switch (_msg.messageType) {
       case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_IMAGE:
       case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_VIDEO:
+      case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_FILE:
         store?.msgStore.sendMessageActive({
           msg: _msg,
           conversationId: _msg.conversationId,
@@ -467,7 +714,87 @@ const handleResendMsg = async () => {
 const showForward = ref(false);
 
 const handleForwardMsg = () => {
+  closeTooltip();
   showForward.value = true;
+};
+
+const handleMultiSelect = () => {
+  closeTooltip();
+  props.onMultiSelect?.(props.msg);
+};
+
+const isPinLimitError = (error: unknown) => {
+  const err = error as {
+    code?: number;
+    errorCode?: number;
+    messageStatus?: { errorCode?: number };
+  };
+
+  return (
+    err?.code === 107319 ||
+    err?.errorCode === 107319 ||
+    err?.messageStatus?.errorCode === 107319
+  );
+};
+
+const handlePinMsg = async () => {
+  closeTooltip();
+
+  if (
+    store?.connectStore.loginStatus !==
+    V2NIMConst.V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINED
+  ) {
+    showToast({ message: t("offlineText"), type: "info" });
+    return;
+  }
+
+  try {
+    if (pinned.value) {
+      await store?.msgStore.unpinMessageActive(getMessageRefer(props.msg));
+    } else {
+      await store?.msgStore.pinMessageActive(props.msg);
+    }
+  } catch (error) {
+    showToast({
+      message:
+        !pinned.value && isPinLimitError(error)
+          ? t("107319")
+          : pinned.value
+          ? t("unpinFailedText")
+          : t("pinFailedText"),
+      type: "info",
+    });
+  }
+};
+
+const handleCollectMsg = async () => {
+  closeTooltip();
+
+  if (
+    store?.connectStore.loginStatus !==
+    V2NIMConst.V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINED
+  ) {
+    showToast({ message: t("offlineText"), type: "info" });
+    return;
+  }
+
+  try {
+    const converter = getMessageCollectionConverter(nim);
+    if (!converter) {
+      throw new Error("V2NIMMessageConverter unavailable");
+    }
+    await store?.msgStore.addCollectionActive(
+      createMessageCollectionParams(props.msg, converter)
+    );
+    showToast({ message: t("addCollectionSuccessText"), type: "info" });
+  } catch (error) {
+    showToast({
+      message: isCollectionLimitError(error)
+        ? t("collectionLimitText")
+        : t("addCollectionFailedText"),
+      type: "info",
+    });
+  }
 };
 
 // 回复消息
@@ -566,6 +893,69 @@ const addFriend = () => {
   });
 };
 
+const isUnconvertedVoiceMsg = computed(() => {
+  return (
+    props.msg.messageType ===
+      V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO &&
+    !props.voiceTextMap?.[props.msg.messageClientId]
+  );
+});
+
+const handleVoiceToText = async () => {
+  closeTooltip();
+
+  if (
+    store?.connectStore.loginStatus !==
+    V2NIMConst.V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINED
+  ) {
+    showToast({
+      message: t("offlineText"),
+      type: "info",
+    });
+    return;
+  }
+
+  const attachment = props.msg.attachment as any;
+  if (!attachment?.url || !attachment?.duration) {
+    showToast({
+      message: t("voiceToTextFailText"),
+      type: "info",
+    });
+    return;
+  }
+
+  try {
+    const text = await nim?.V2NIMMessageService.voiceToText({
+      voiceUrl: attachment.url,
+      duration: attachment.duration,
+      mimeType: "aac",
+      sampleRate: "16000",
+      sceneName: attachment.sceneName,
+    });
+
+    if (!isMountedRef.value) {
+      return;
+    }
+
+    if (text) {
+      props.setVoiceText?.(props.msg.messageClientId, text);
+    } else {
+      showToast({
+        message: t("voiceToTextFailText"),
+        type: "info",
+      });
+    }
+  } catch {
+    if (!isMountedRef.value) {
+      return;
+    }
+    showToast({
+      message: t("voiceToTextFailText"),
+      type: "info",
+    });
+  }
+};
+
 const uninstallFriendsWatch = autorun(() => {
   const _isFriend = proxy?.$UIKitStore.uiStore.friends
     .filter(
@@ -579,6 +969,7 @@ const uninstallFriendsWatch = autorun(() => {
 
 //卸载监听
 onUnmounted(() => {
+  isMountedRef.value = false;
   uninstallFriendsWatch();
 });
 </script>
@@ -602,19 +993,30 @@ onUnmounted(() => {
   margin-right: 8px;
 }
 
+.msg-bg-image {
+  max-width: none;
+  padding: 0;
+  background: transparent;
+}
+
 .msg-action-groups {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  max-width: 224px;
-  width: max-content;
+  display: grid;
+  grid-template-columns: repeat(var(--action-columns, 4), 56px);
+  row-gap: 10px;
+  width: calc(var(--action-columns, 4) * 56px);
+}
+
+.msg-action-groups-unknown {
+  display: grid;
+  grid-template-columns: repeat(var(--action-columns, 2), 56px);
+  row-gap: 10px;
+  width: calc(var(--action-columns, 2) * 56px);
 }
 
 .msg-action-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-top: 10px;
   width: 56px;
 }
 
@@ -625,8 +1027,16 @@ onUnmounted(() => {
 
 .msg-action-btn-text {
   color: #000;
-  font-size: 14px;
-  word-break: keep-all;
+  font-size: 13px;
+  line-height: 100%;
+  text-align: center;
+  width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  hyphens: auto;
+  white-space: normal;
+  margin-top: 5px;
 }
 
 .msg-failed-wrapper {
@@ -658,9 +1068,9 @@ onUnmounted(() => {
 .msg-status-wrapper {
   display: flex;
   flex-direction: row;
+  align-items: center;
   margin-right: 8px;
   box-sizing: border-box;
-  position: relative;
 }
 
 .msg-status-wrapper .msg-bg-out {
@@ -682,9 +1092,6 @@ onUnmounted(() => {
 .msg-status-icon.icon-loading {
   color: #337eff;
   animation: loadingCircle 1s infinite linear;
-  position: absolute;
-  bottom: 0px;
-  left: -30px;
 }
 
 .icon-fail {

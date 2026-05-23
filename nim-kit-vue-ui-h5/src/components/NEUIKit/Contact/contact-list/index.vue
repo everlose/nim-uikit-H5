@@ -158,13 +158,16 @@ onUnmounted(() => {
 /* 主容器 */
 .contact-list-container {
   height: 100%;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   background-color: #fff;
-  overflow: auto;
+  overflow: hidden;
 }
 
 /* 导航栏 */
 .navigation-bar {
+  flex: 0 0 60px;
   height: 60px;
   border-bottom: 1px solid #e9eff5;
   padding: 0 20px;
@@ -185,12 +188,12 @@ onUnmounted(() => {
 
 /* 联系人列表 */
 .contact-list {
-  height: calc(100% - 60px - var(--status-bar-height));
+  flex: 1;
+  min-height: 0;
   box-sizing: border-box;
   width: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: 60px;
   background-color: #fff;
 }
 

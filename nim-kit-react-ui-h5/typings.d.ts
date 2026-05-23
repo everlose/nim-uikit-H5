@@ -1,39 +1,17 @@
-// 全局类型声明
-
-// Less 模块声明
-declare module '*.less' {
-  const content: { [className: string]: string }
-  export default content
+declare module 'browser-md5-file' {
+  export default class BMF {
+    md5(file: File, callback: (error: unknown, md5: string) => void): void
+  }
 }
 
-// CSS 模块声明
-declare module '*.css' {
-  const content: { [className: string]: string }
-  export default content
-}
-
-// 图片资源声明
 declare module '*.png' {
-  const content: string
-  export default content
-}
-
-declare module '*.jpg' {
-  const content: string
-  export default content
-}
-
-declare module '*.jpeg' {
-  const content: string
-  export default content
-}
-
-declare module '*.gif' {
-  const content: string
-  export default content
+  const src: string
+  export default src
 }
 
 declare module '*.svg' {
-  const content: string
-  export default content
+  const src: string
+  export default src
 }
+
+declare module '*.less'

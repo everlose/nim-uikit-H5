@@ -11,6 +11,10 @@ export function setLanguage(language: string) {
   currentLanguage = language
 }
 
+export function getLanguage() {
+  return currentLanguage
+}
+
 export const t = (key: string) => {
   return i18nData[currentLanguage][key] || key
 }

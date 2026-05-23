@@ -127,6 +127,10 @@ const P2pSetting: React.FC<P2pSettingProps> = observer(({ accountId: propAccount
     }
   }
 
+  const gotoPinList = () => {
+    navigate(`${neUiKitRouterPath.pinList}?conversationId=${conversationId}`)
+  }
+
   // 处理返回按钮点击
   const handleBack = () => {
     navigate(-1)
@@ -161,6 +165,11 @@ const P2pSetting: React.FC<P2pSettingProps> = observer(({ accountId: propAccount
           <div className="p2p-set-item p2p-set-item-flex-sb">
             <div>{t('stickTopText')}</div>
             <Switch checked={isStickTop} onChange={changeStickTopInfo} />
+          </div>
+
+          <div className="p2p-set-item p2p-set-item-flex-sb" onClick={gotoPinList}>
+            <div>{t('pinText')}</div>
+            <Icon iconClassName="more-icon" style={{ color: '#999' }} type="icon-jiantou" />
           </div>
         </div>
       </div>

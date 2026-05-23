@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from '@/utils/router'
 import { observer } from 'mobx-react-lite'
-import Avatar from '@/NEUIKit/common/components/Avatar'
+import AvatarWithStatus from '@/NEUIKit/common/components/AvatarWithStatus'
 import Empty from '@/NEUIKit/common/components/Empty'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
@@ -73,7 +73,7 @@ const FriendList: React.FC = observer(() => {
               <div className="friend-group-title">{friendGroup.key}</div>
               {friendGroup.data.map((friend) => (
                 <div className="friend-item" key={friend.accountId} onClick={() => handleFriendItemClick(friend)}>
-                  <Avatar account={friend.accountId} />
+                  <AvatarWithStatus account={friend.accountId} />
                   <div className="friend-name">{friend.appellation}</div>
                 </div>
               ))}

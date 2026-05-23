@@ -1,28 +1,34 @@
 <template>
-  <div
-    :class="!msg.isSelf || mode === 'audio-in' ? 'audio-in' : 'audio-out'"
-    :style="{ width: audioContainerWidth + 'px' }"
-    @click="togglePlay"
-  >
-    <div class="audio-dur">{{ duration }}s</div>
-    <div class="audio-icon-wrapper">
-      <Icon :size="24" :key="audioIconType" :type="audioIconType" />
+  <div class="message-audio-container">
+    <div
+      :class="!msg.isSelf || mode === 'audio-in' ? 'audio-in' : 'audio-out'"
+      :style="{ width: audioContainerWidth + 'px' }"
+      @click="togglePlay"
+    >
+      <div class="audio-dur">{{ duration }}s</div>
+      <div class="audio-icon-wrapper">
+        <Icon :size="24" :key="audioIconType" :type="audioIconType" />
+      </div>
+      <audio
+        :src="audioSrc"
+        ref="audioRef"
+        @play="onAudioPlay"
+        @pause="onAudioStop"
+        @ended="onAudioEnded"
+        @error="onAudioError"
+      ></audio>
     </div>
-    <audio
-      :src="audioSrc"
-      ref="audioRef"
-      @play="onAudioPlay"
-      @pause="onAudioStop"
-      @ended="onAudioEnded"
-      @error="onAudioError"
-    ></audio>
+    <div v-if="voiceText" class="voice-text-container">
+      <div class="voice-text-divider"></div>
+      <div class="voice-text-content">{{ voiceText }}</div>
+    </div>
   </div>
 </template>
 
 <script lang="ts" setup>
 import { ref, onUnmounted, computed, onMounted } from "vue";
 import Icon from "../../CommonComponents/Icon.vue";
-import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/types";
+import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import type { V2NIMMessageAudioAttachment } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
 
 const props = withDefaults(
@@ -30,6 +36,7 @@ const props = withDefaults(
     msg: V2NIMMessageForUI;
     mode?: "audio-in" | "audio-out";
     broadcastNewAudioSrc?: string;
+    voiceText?: string;
   }>(),
   {}
 );
@@ -153,12 +160,37 @@ onUnmounted(() => {
 .audio-in {
   flex-direction: row-reverse;
 }
-.audio-icon-wrapper {
-  /* transform: rotate(180deg); */
+
+.audio-in .audio-icon-wrapper {
+  transform: scaleX(-1);
 }
+
 .audio-icon-wrapper {
   height: 24px;
   display: flex;
   align-items: center;
+}
+
+.message-audio-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.voice-text-container {
+  margin-top: 4px;
+}
+
+.voice-text-divider {
+  height: 1px;
+  background-color: rgba(0, 0, 0, 0.1);
+  margin-bottom: 8px;
+}
+
+.voice-text-content {
+  font-size: 14px;
+  line-height: 20px;
+  color: #333;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 </style>

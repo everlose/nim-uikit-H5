@@ -13,7 +13,7 @@ import { replaceEmoji } from '@/NEUIKit/common/utils'
 import { toast } from '@/NEUIKit/common/utils/toast'
 import emitter from '@/NEUIKit/common/utils/eventBus'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
-import type { V2NIMMessageForUI, YxServerExt, YxAitMsg } from '@xkit-yx/im-store-v2/dist/types/types'
+import type { V2NIMMessageForUI, YxServerExt, YxAitMsg } from '@xkit-yx/im-store-v2/dist/types/src/types'
 import type { V2NIMMessage } from 'nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService'
 import type { V2NIMTeam, V2NIMTeamChatBannedMode, V2NIMTeamMember } from 'nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService'
 import './index.less'
@@ -27,12 +27,13 @@ interface MessageInputProps {
   replyMsgsMap?: {
     [key: string]: V2NIMMessageForUI
   }
+  onSendMessage?: () => void
 }
 
 /**
  * 消息输入组件
  */
-const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, to, replyMsgsMap = {} }) => {
+const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, to, replyMsgsMap = {}, onSendMessage }) => {
   const { t } = useTranslation()
   const { store, nim } = useStateContext()
 
@@ -101,6 +102,7 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
   const imageInputRef = useRef<HTMLInputElement>(null)
   // 文件输入引用
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const FILE_SIZE_LIMIT = 200 * 1024 * 1024
 
   // 处理输入框聚焦
   const handleInputFocus = () => {
@@ -138,6 +140,7 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
   // 发送文本消息
   const handleSendTextMsg = () => {
     if (inputText.trim() === '') return
+    onSendMessage?.()
 
     let text = replaceEmoji(inputText)
     const textMsg = nim.V2NIMMessageCreator.createTextMessage(text)
@@ -295,6 +298,15 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
     fileInputRef.current?.click()
   }
 
+  const isFileSizeValid = (file: File, input?: HTMLInputElement | null) => {
+    if (file.size <= FILE_SIZE_LIMIT) return true
+    toast.info(t('fileSizeLimitText'))
+    if (input) {
+      input.value = ''
+    }
+    return false
+  }
+
   // 处理图片选择
   const onImageSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -305,6 +317,8 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
       toast.info(t('selectImageText'))
       return
     }
+    if (!isFileSizeValid(file, imageInputRef.current)) return
+    onSendMessage?.()
 
     // 补充: 若图片超过 20MB, 当作文件对象发送而不是图片发送.
     const fileMsg = file.size > 20 * 1024 * 1024 ? nim.V2NIMMessageCreator.createFileMessage(file) : nim.V2NIMMessageCreator.createImageMessage(file)
@@ -335,6 +349,8 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
     const file = event.target.files?.[0]
 
     if (!file) return
+    if (!isFileSizeValid(file, fileInputRef.current)) return
+    onSendMessage?.()
 
     // 补充: 若图片超过 20MB, 当作文件对象发送而不是图片发送.
     const fileMsg = nim.V2NIMMessageCreator.createFileMessage(file)
@@ -355,8 +371,8 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
       toast.info(t('sendFileFailedText'))
     } finally {
       // 清空 input 的值，这样用户可以重复选择同一个文件
-      if (imageInputRef.current) {
-        imageInputRef.current.value = ''
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
       }
     }
   }
@@ -768,13 +784,26 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
       setSendMoreVisible(false)
     }
 
+    const onAitTeamMember = (member: any) => {
+      const aitMember = member as { accountId: string; appellation: string }
+      setSelectedAtMembers((prev) => [...prev.filter((item) => item.accountId !== aitMember.accountId), aitMember])
+      setInputText((prev) => {
+        const newText = `${prev}@${aitMember.appellation} `
+        prevInputTextRef.current = newText
+        return newText
+      })
+      setIsFocus(true)
+    }
+
     emitter.on(events.ON_REEDIT_MSG, onReEditMsg)
     emitter.on(events.REPLY_MSG, onReplyMsg)
+    emitter.on(events.AIT_TEAM_MEMBER, onAitTeamMember)
     emitter.on(events.CLOSE_PANEL, onClosePanel)
 
     return () => {
       emitter.off(events.ON_REEDIT_MSG, onReEditMsg)
       emitter.off(events.REPLY_MSG, onReplyMsg)
+      emitter.off(events.AIT_TEAM_MEMBER, onAitTeamMember)
       emitter.off(events.CLOSE_PANEL, onClosePanel)
     }
   }, [replyMsgsMap])
@@ -901,6 +930,7 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
           onCancel={handleCloseMention}
           showConfirm={false}
           showCancel={true}
+          title={t('chooseMentionText')}
         >
           <MentionChooseList teamId={to} onClose={handleCloseMention} onMemberClick={handleMentionSelect}></MentionChooseList>
         </BottomPopup>

@@ -22,6 +22,10 @@
           <div>{{ t("stickTopText") }}</div>
           <Switch :checked="isStickTop" @change="changeStickTopInfo" />
         </div>
+        <div class="p2p-set-item p2p-set-item-flex-sb" @click="goPinList">
+          <div>{{ t("pinText") }}</div>
+          <Icon iconClassName="more-icon" color="#999" type="icon-jiantou" />
+        </div>
       </div>
     </div>
   </div>
@@ -133,6 +137,15 @@ const changeStickTopInfo = async (value) => {
       checked ? t("addStickTopFailText") : t("deleteStickTopFailText")
     );
   }
+};
+
+const goPinList = () => {
+  router.push({
+    path: neUiKitRouterPath.pinList,
+    query: {
+      conversationId: conversationId.value,
+    },
+  });
 };
 
 onUnmounted(() => {

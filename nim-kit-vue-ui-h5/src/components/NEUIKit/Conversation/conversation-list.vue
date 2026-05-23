@@ -34,9 +34,8 @@
         </div>
       </div>
     </div>
-    <div class="block"></div>
     <NetworkAlert />
-    <div v-if="!conversationList || conversationList.length === 0">
+    <div v-if="!conversationList || conversationList.length === 0" class="conversation-list-wrapper">
       <div class="security-tip">
         <div>
           {{ t("securityTipText") }}
@@ -117,12 +116,13 @@ import { showToast } from "../utils/toast";
 import type {
   V2NIMConversationForUI,
   V2NIMLocalConversationForUI,
-} from "@xkit-yx/im-store-v2/dist/types/types";
+} from "@xkit-yx/im-store-v2/dist/types/src/types";
 import { useRouter } from "vue-router";
 import { neUiKitRouterPath } from "../utils/uikitRouter";
 import { onMounted } from "vue";
 import { trackInit } from "../utils/reporter";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
+import { clearVoiceTextCache } from "../Chat/voiceTextCache";
 
 const conversationList = ref<
   (V2NIMConversationForUI | V2NIMLocalConversationForUI)[]
@@ -148,6 +148,7 @@ const listWrapper = ref<HTMLElement | null>(null);
 const loading = ref(false);
 
 onMounted(() => {
+  clearVoiceTextCache();
   store?.uiStore.selectConversation("");
 });
 
@@ -363,12 +364,14 @@ onUnmounted(() => {
 <style scoped>
 .conversation-wrapper {
   height: 100%;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background-color: #fff;
 }
 
 .navigation-bar {
-  position: fixed;
+  flex: 0 0 60px;
   height: 60px;
   border-bottom: 1px solid #e9eff5;
   padding-left: 20px;
@@ -377,6 +380,7 @@ onUnmounted(() => {
   justify-content: space-between;
   background-color: #fff;
   width: 100%;
+  box-sizing: border-box;
   opacity: 1;
   z-index: 999;
 }
@@ -428,14 +432,9 @@ onUnmounted(() => {
   align-items: center;
 }
 
-.block {
-  height: 60px;
-  width: 100%;
-  display: block;
-}
-
 .conversation-list-wrapper {
-  height: calc(100% - 120px);
+  flex: 1;
+  min-height: 0;
   box-sizing: border-box;
   width: 100%;
   overflow-y: auto;

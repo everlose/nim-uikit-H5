@@ -16,7 +16,7 @@
           :key="friend.accountId"
           @click="handleFriendItemClick(friend)"
         >
-          <Avatar :account="friend.accountId" />
+          <AvatarWithStatus :account="friend.accountId" />
           <div class="friend-name">{{ friend.appellation }}</div>
         </div>
       </div>
@@ -26,7 +26,7 @@
 
 <script lang="ts" setup>
 /** 好友列表组件 */
-import Avatar from "../../CommonComponents/Avatar.vue";
+import AvatarWithStatus from "../../CommonComponents/AvatarWithStatus.vue";
 import { autorun } from "mobx";
 import { onUnmounted, ref, getCurrentInstance } from "vue";
 import { friendGroupByPy } from "../../utils/friend";
@@ -84,6 +84,9 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.friend-group-list {
+  padding-bottom: 20px;
+}
 .friend-group-item {
   padding-left: 20px;
 }

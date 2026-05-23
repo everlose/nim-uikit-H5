@@ -3,8 +3,11 @@
     class="avatar"
     :style="{ width: avatarSize + 'px', height: avatarSize + 'px' }"
     @click="handleAvatarClick"
-    @longpress="longpress"
-    @touchend="touchend"
+    @pointerdown="handlePointerDown"
+    @pointermove="handlePointerMove"
+    @pointerup="handlePointerEnd"
+    @pointercancel="handlePointerEnd"
+    @pointerleave="handlePointerEnd"
   >
     <!-- 使用遮罩层避免android长按头像会出现保存图片的弹窗 -->
     <div class="img-mask"></div>
@@ -59,6 +62,8 @@ const router = useRouter();
 const avatarSize = props.size || 42;
 const user = ref<V2NIMUser>();
 let isLongPress = false;
+let longpressTimer: ReturnType<typeof setTimeout> | undefined;
+let startPoint: { x: number; y: number } | undefined;
 const appellation = computed(() => {
   return proxy?.$UIKitStore.uiStore
     .getAppellation({
@@ -99,18 +104,51 @@ const handleAvatarClick = () => {
   }
 };
 
+const clearLongpressTimer = () => {
+  if (longpressTimer) {
+    clearTimeout(longpressTimer);
+    longpressTimer = undefined;
+  }
+};
+
+const startLongpressTimer = (x: number, y: number) => {
+  clearLongpressTimer();
+  startPoint = { x, y };
+  longpressTimer = setTimeout(() => {
+    longpress();
+  }, 500);
+};
+
+const cancelLongpressOnMove = (x: number, y: number) => {
+  if (!startPoint) return;
+  if (Math.abs(x - startPoint.x) > 8 || Math.abs(y - startPoint.y) > 8) {
+    clearLongpressTimer();
+  }
+};
+
+const handlePointerDown = (event: PointerEvent) => {
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  startLongpressTimer(event.clientX, event.clientY);
+};
+
+const handlePointerMove = (event: PointerEvent) => {
+  cancelLongpressOnMove(event.clientX, event.clientY);
+};
+
 const longpress = () => {
   isLongPress = true;
   $emit("onLongpress");
 };
 
-const touchend = () => {
+const handlePointerEnd = () => {
+  clearLongpressTimer();
   setTimeout(() => {
     isLongPress = false;
   }, 200);
 };
 
 onUnmounted(() => {
+  clearLongpressTimer();
   uninstallUserInfoWatch();
 });
 </script>

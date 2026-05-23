@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite'
 import Icon from '@/NEUIKit/common/components/Icon'
 import { convertSecondsToTime } from '@/NEUIKit/common/utils'
 import { g2StatusMap } from '@/NEUIKit/common/utils/constants'
-import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/types'
+import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
 import './index.less'
 
 interface MessageG2Props {
