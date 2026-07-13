@@ -43,6 +43,10 @@ export interface ProviderProps {
 
 export const Context = createContext<ContextProps>({})
 
+// 模块级变量，确保跨越 StrictMode 多次挂载 / Provider 多次实例化时，
+// 全局只有一个 RootStore 实例连接到同一个 NIM 实例
+let _globalRootStore: RootStore | null = null
+
 export const Provider: FC<ProviderProps> = memo(function Main({
   children,
   localOptions,
@@ -72,15 +76,18 @@ export const Provider: FC<ProviderProps> = memo(function Main({
     return { ...localOptions }
   }, [localOptions])
 
-  const rootStore = useMemo(() => {
+  // 使用模块级全局变量确保只创建一个 store 实例
+  // useRef 在每个组件实例中独立，无法跨越 StrictMode/多次挂载
+  if (!_globalRootStore) {
     if (singleton) {
       // @ts-ignore
-      return RootStore.getInstance(nim, finalLocalOptions, 'H5')
+      _globalRootStore = RootStore.getInstance(nim, finalLocalOptions, 'H5')
+    } else {
+      // @ts-ignore
+      _globalRootStore = new RootStore(nim, finalLocalOptions, 'H5')
     }
-
-    // @ts-ignore
-    return new RootStore(nim, finalLocalOptions, 'H5')
-  }, [nim, singleton, finalLocalOptions])
+  }
+  const rootStore = _globalRootStore
 
   // @ts-ignore
   window.__xkit_store__ = {
@@ -94,7 +101,11 @@ export const Provider: FC<ProviderProps> = memo(function Main({
   const subscribedAccountsRef = useRef<Set<string>>(new Set())
 
   // 订阅好友在线状态
+  // 直接使用模块级 _globalRootStore，避免将深度嵌套对象放入 deps 数组
   useEffect(() => {
+    const store = _globalRootStore
+    if (!store) return
+
     /**
      * 批量订阅好友状态
      */
@@ -109,7 +120,7 @@ export const Provider: FC<ProviderProps> = memo(function Main({
       const batches = chunk(newAccountIds, SUBSCRIPTION_BATCH_SIZE)
       for (const batch of batches) {
         try {
-          await rootStore.subscriptionStore.subscribeUserStatusActive(batch)
+          await store.subscriptionStore.subscribeUserStatusActive(batch)
           // 记录已订阅的账号
           batch.forEach(id => subscribedAccountsRef.current.add(id))
         } catch (error) {
@@ -126,7 +137,7 @@ export const Provider: FC<ProviderProps> = memo(function Main({
       // 清空已订阅列表
       subscribedAccountsRef.current.clear()
       // 重新订阅
-      const friends = rootStore.uiStore.friends
+      const friends = store.uiStore.friends
       if (friends && friends.length > 0) {
         const accountIds = friends.map(f => f.accountId)
         subscribeFriendsStatus(accountIds)
@@ -135,7 +146,7 @@ export const Provider: FC<ProviderProps> = memo(function Main({
 
     // 使用 MobX reaction 监听好友列表变化
     const disposeFriends = reaction(
-      () => rootStore.uiStore.friends,
+      () => store.uiStore.friends,
       (friends) => {
         if (friends && friends.length > 0) {
           const accountIds = friends.map(f => f.accountId)
@@ -147,7 +158,7 @@ export const Provider: FC<ProviderProps> = memo(function Main({
 
     // 监听登录状态变化，重连后重新订阅
     const disposeLogin = reaction(
-      () => rootStore.connectStore.loginStatus,
+      () => store.connectStore.loginStatus,
       (status, prevStatus) => {
         // 从非登录状态变为登录状态时，重新订阅
         // prevStatus !== 1 确保不是首次登录（首次登录由 disposeFriends 处理）
@@ -162,15 +173,12 @@ export const Provider: FC<ProviderProps> = memo(function Main({
       disposeFriends()
       disposeLogin()
     }
-  }, [rootStore])
+  }, [])
 
-  useEffect(() => {
-    return () => {
-      if (!singleton) {
-        rootStore.destroy()
-      }
-    }
-  }, [rootStore, singleton])
+  // We do NOT destroy rootStore on unmount because React StrictMode in development
+  // double-mounts the component, which would invoke effect cleanup and remove all
+  // NIM event listeners registered in the store constructor, breaking login status tracking.
+  // Logout is handled by setting/index.tsx (calls V2NIMLoginService.logout without destroying store).
 
   return (
     <Context.Provider

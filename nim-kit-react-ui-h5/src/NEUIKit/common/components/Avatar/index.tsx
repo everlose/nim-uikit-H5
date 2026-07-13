@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { observer } from 'mobx-react-lite'
 import { useNavigate } from '@/utils/router'
 import { useStateContext } from '../../hooks/useStateContext'
 import { getAvatarBackgroundColor } from '../../utils'
@@ -73,21 +74,28 @@ const Avatar: React.FC<AvatarProps> = ({
   const { store, nim } = useStateContext()
   // 直接得到 user
   const user = store.userStore.users.get(account)
+  const avatarSize = typeof size === 'number' ? size : parseInt(size) || 42
+  const thumbSize = avatarSize * 2
   const avatarUrl =
     avatar || user?.avatar
       ? // @ts-ignore
         nim.cloudStorage.getThumbUrl(avatar || user?.avatar, {
-          width: 42,
-          height: 42
+          width: thumbSize,
+          height: thumbSize
         })
       : ''
   const [isLongPress, setIsLongPress] = useState<boolean>(false)
-
-  const avatarSize = typeof size === 'number' ? size : parseInt(size) || 42
   const fontSizeValue = fontSize ? (typeof fontSize === 'number' ? fontSize : parseInt(fontSize)) : Math.floor(avatarSize / 3)
 
   const touchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const touchStartPointRef = useRef<{ x: number; y: number } | null>(null)
+
+  // 主动拉取用户信息，确保头像和昵称正确展示
+  useEffect(() => {
+    if (account) {
+      store.userStore.getUserActive(account)
+    }
+  }, [account])
 
   // 销毁组件时需要销毁定时器
   useEffect(() => {
@@ -104,7 +112,7 @@ const Avatar: React.FC<AvatarProps> = ({
 
     const appellation = store.uiStore.getAppellation({
       account,
-      teamId,
+      teamId: '',
       ignoreAlias: false,
       nickFromMsg
     })
@@ -123,6 +131,15 @@ const Avatar: React.FC<AvatarProps> = ({
     }
 
     if (gotoUserCard && !isLongPress) {
+      // 仅在锚点模式下移除 URL 中的 anchorMessageClientId，防止返回后仍锚点到标记消息
+      const hashQuery = window.location.hash.split('?')[1] || ''
+      const params = new URLSearchParams(hashQuery)
+      if (params.get('anchorMessageClientId')) {
+        const convId = params.get('conversationId')
+        if (convId) {
+          window.history.replaceState(window.history.state, '', `#/chat?conversationId=${convId}`)
+        }
+      }
       if (account === store.userStore.myUserInfo.accountId) {
         // 跳转到我的详情页
         navigate('/user/my-detail')
@@ -204,4 +221,4 @@ const Avatar: React.FC<AvatarProps> = ({
   )
 }
 
-export default Avatar
+export default observer(Avatar)

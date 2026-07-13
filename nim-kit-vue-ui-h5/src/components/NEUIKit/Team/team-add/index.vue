@@ -1,9 +1,15 @@
 <template>
   <div class="team-add-wrapper">
-    <NavBar :title="t('friendSelectText')">
+    <NavBar :title="t('friendSelectText')" showLeft>
+      <template v-slot:left>
+        <div class="nav-cancel-btn" @click="router.back()">{{ t('cancelText') }}</div>
+      </template>
       <template v-slot:right>
-        <div @click="addTeamMember">
-          {{ t("okText") }}
+        <div
+          :class="['add-button', { disabled: newTeamMember.length === 0 }]"
+          @click="newTeamMember.length > 0 && addTeamMember()"
+        >
+          {{ newTeamMember.length > 0 ? `${t('yesText')}(${newTeamMember.length})` : t('yesText') }}
         </div>
       </template>
     </NavBar>
@@ -12,6 +18,8 @@
         :personList="friendList"
         :showBtn="false"
         @checkboxChange="checkboxChange"
+        @maxExceeded="toast.info(t('maxSelectedText'))"
+        :max="200"
       >
       </PersonSelect>
     </div>
@@ -28,15 +36,17 @@ import { t } from "../../utils/i18n";
 import { debounce } from "@xkit-yx/utils";
 import { toast } from "../../utils/toast";
 import { useRouter } from "vue-router";
+import { useTeamNotification } from "../../composables/useTeamNotification";
 
 const router = useRouter();
 
 const friendList = ref<PersonSelectItem[]>([]);
 let teamId = "";
-let newTeamMember: string[] = [];
+const newTeamMember = ref<string[]>([]);
 
 const { proxy } = getCurrentInstance()!; // 获取组件实例
 const store = proxy?.$UIKitStore;
+useTeamNotification(() => teamId);
 
 onMounted(() => {
   teamId = (router.currentRoute.value.query.teamId as string) || "";
@@ -60,22 +70,26 @@ onMounted(() => {
 });
 
 const checkboxChange = (selectList) => {
-  newTeamMember = selectList;
+  if (selectList.length > 200) {
+    toast.info(t("maxSelectedText"));
+    return;
+  }
+  newTeamMember.value = selectList;
 };
 // 添加群成员
 const addTeamMember = debounce(() => {
   // 群成员数量存在限制
-  if (newTeamMember.length > 200) {
+  if (newTeamMember.value.length > 200) {
     toast.info(t("maxSelectedText"));
     return;
   }
-  if (newTeamMember.length == 0) {
+  if (newTeamMember.value.length == 0) {
     toast.info(t("friendSelect"));
     return;
   }
 
   store?.teamMemberStore
-    .addTeamMemberActive({ teamId, accounts: newTeamMember })
+    .addTeamMemberActive({ teamId, accounts: newTeamMember.value })
     .then(async () => {
       router.back();
     })
@@ -103,5 +117,22 @@ const addTeamMember = debounce(() => {
 .team-member-select {
   height: calc(100% - 44px);
   overflow: hidden;
+}
+
+.add-button {
+  color: #337eff;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.add-button.disabled {
+  color: #b3cff7;
+  cursor: not-allowed;
+}
+
+.nav-cancel-btn {
+  font-size: 16px;
+  color: #333;
+  cursor: pointer;
 }
 </style>

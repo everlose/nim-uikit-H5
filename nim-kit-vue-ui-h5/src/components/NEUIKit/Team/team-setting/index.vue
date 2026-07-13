@@ -56,12 +56,9 @@
         </div>
       </div>
       <div class="team-set-card">
-        <div class="team-set-item team-set-item-flex">
-          <div>{{ t("stickTopText") }}</div>
-          <Switch
-            :checked="!!conversation?.stickTop"
-            @change="changeStickTopInfo"
-          />
+        <div class="team-set-item team-set-item-flex" @click="goPinList">
+          <div>{{ t("pinText") }}</div>
+          <Icon iconClassName="more-icon" color="#999" type="icon-jiantou" />
         </div>
         <div class="team-set-item team-set-item-flex">
           <div>{{ t("sessionMuteText") }}</div>
@@ -75,12 +72,15 @@
             @change="changeTeamMute"
           />
         </div>
+        <div class="team-set-item team-set-item-flex">
+          <div>{{ t("stickTopText") }}</div>
+          <Switch
+            :checked="!!conversation?.stickTop"
+            @change="changeStickTopInfo"
+          />
+        </div>
         <div class="team-set-item team-set-item-flex" @click="goNickInTeam">
           <div>{{ t("nickInTeam") }}</div>
-          <Icon iconClassName="more-icon" color="#999" type="icon-jiantou" />
-        </div>
-        <div class="team-set-item team-set-item-flex" @click="goPinList">
-          <div>{{ t("pinText") }}</div>
           <Icon iconClassName="more-icon" color="#999" type="icon-jiantou" />
         </div>
       </div>
@@ -134,14 +134,17 @@ import RootStore from "@xkit-yx/im-store-v2";
 import { onMounted } from "vue";
 import Switch from "../../CommonComponents/Switch.vue";
 import { toast } from "../../utils/toast";
-import { modal } from "../../utils/modal";
+import { modal, showModal } from "../../utils/modal";
 import { neUiKitRouterPath } from "../../utils/uikitRouter";
+import { useTeamNotification } from "../../composables/useTeamNotification";
 
 const router = useRouter();
 const { proxy } = getCurrentInstance()!;
 const store = proxy?.$UIKitStore as RootStore;
 const nim = proxy?.$NIM;
 let teamId = "";
+const isDismissing = ref(false);
+useTeamNotification(() => teamId, isDismissing);
 const teamMembers = ref<V2NIMTeamMember[]>([]);
 const conversation = ref<
   V2NIMConversationForUI | V2NIMLocalConversationForUI
@@ -233,6 +236,7 @@ const showDismissConfirm = () => {
     title: t("dismissTeamText"),
     content: t("dismissTeamConfirmText"),
     onConfirm: () => {
+      isDismissing.value = true
       store.teamStore
         .dismissTeamActive(teamId)
         .then(() => {
@@ -454,7 +458,7 @@ onUnmounted(() => {
 
 .team-info-id {
   font-size: 12px;
-  color: #999999;
+  color: #666;
   margin-top: 4px;
   overflow: hidden;
   text-overflow: ellipsis;

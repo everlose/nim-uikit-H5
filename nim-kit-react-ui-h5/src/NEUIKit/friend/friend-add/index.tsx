@@ -100,7 +100,7 @@ const FriendAdd: React.FC = observer(() => {
         const conversationId = store.nim.V2NIMConversationIdUtil.p2pConversationId(to)
         await store.uiStore.selectConversation(conversationId)
 
-        navigate(neUiKitRouterPath.chat)
+        navigate(`${neUiKitRouterPath.chat}?conversationId=${conversationId}`)
       } catch (error) {
         toast.info(t('gotoChatFailText'))
       }

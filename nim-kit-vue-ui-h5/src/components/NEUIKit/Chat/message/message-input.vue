@@ -54,9 +54,6 @@
       </div>
     </div>
     <div class="msg-input-wrapper">
-      <div class="input-emoji-icon" @click="handleEmojiVisible">
-        <Icon :size="24" type="icon-biaoqing" />
-      </div>
       <div class="input-inner">
         <!-- 当从表情面板切换到文字输入时，直接唤起键盘，会导致input框滚动消失，故此处需要一个fake Input兼容下，保证先隐藏表情/其他面板，再弹出键盘 -->
         <div v-show="showFakeInput" @click="onHideFakeInput" class="fake-input">
@@ -91,8 +88,58 @@
         >
         </Input>
       </div>
-      <div @click="handleSendMoreVisible" class="input-send-more">
-        <Icon type="send-more" :size="24" />
+
+      <!-- 操作栏：四列布局，与 Android 对齐 -->
+      <div class="input-action-bar">
+        <div class="input-action-icon" @click="handleEmojiVisible">
+          <Icon :size="24" :type="emojiVisible ? 'icon-emoji-active' : 'icon-emoji-normal'" />
+        </div>
+        <div class="input-action-icon">
+          <input
+            type="file"
+            ref="imageInput"
+            accept="image/*,video/*"
+            class="file-input-overlay"
+            :style="{ pointerEvents: isTeamMute ? 'none' : 'auto' }"
+            @change="onImageSelected"
+          />
+          <Icon :size="24" type="icon-tupian" />
+        </div>
+        <div class="input-action-icon input-action-empty" />
+        <div
+          class="input-action-icon input-send-more"
+          :class="{ active: sendMoreVisible }"
+          @click="handleSendMoreVisible"
+        >
+          <Icon :type="sendMoreVisible ? 'icon-more-active' : 'icon-more-normal'" :size="24" />
+        </div>
+      </div>
+
+      <!-- 更多操作扩展区 -->
+      <div v-if="sendMoreVisible" class="send-more-expand" @click.stop>
+        <div class="send-more-expand-item" @click="handleCameraClick">
+          <div class="send-more-expand-icon">
+            <Icon :size="26" type="icon-paishe" />
+          </div>
+          <div class="send-more-expand-label">拍摄</div>
+        </div>
+        <div class="send-more-expand-item">
+          <input
+            type="file"
+            ref="fileInput"
+            accept="*/*"
+            class="file-input-overlay"
+            :style="{ pointerEvents: isTeamMute ? 'none' : 'auto' }"
+            @change="onFileSelected"
+          />
+          <div class="send-more-expand-icon">
+            <Icon :size="26" type="icon-wenjian" />
+          </div>
+          <div class="send-more-expand-label">{{ t("fileText") }}</div>
+        </div>
+        <!-- 隐藏的拍照和摄像 input（由 ActionSheet 触发） -->
+        <input type="file" ref="cameraPhotoInput" accept="image/*" capture="environment" style="display:none" @change="onCameraPhotoSelected" />
+        <input type="file" ref="cameraVideoInput" accept="video/*" capture="environment" style="display:none" @change="onCameraVideoSelected" />
       </div>
     </div>
     <!-- 表情面板 -->
@@ -102,34 +149,6 @@
         @emojiDelete="handleEmojiDelete"
         @emojiSend="handleSendTextMsg"
       />
-    </div>
-    <!-- 发送更多面板 -->
-    <div v-if="sendMoreVisible" class="send-more-panel" @click.stop="() => {}">
-      <div class="send-more-panel-item-wrapper">
-        <div class="send-more-panel-item">
-          <input
-            type="file"
-            ref="imageInput"
-            accept="image/*"
-            class="file-input-overlay"
-            @change="onImageSelected"
-          />
-          <Icon @click="handleSendImageMsg" :size="26" type="icon-tupian" />
-        </div>
-        <div class="icon-text">{{ t("albumText") }}</div>
-      </div>
-      <div class="send-more-panel-item-wrapper">
-        <div class="send-more-panel-item">
-          <input
-            type="file"
-            ref="fileInput"
-            class="file-input-overlay"
-            @change="onFileSelected"
-          />
-          <Icon @click="handleSendFileMsg" :size="26" type="icon-wenjian" />
-        </div>
-        <div class="icon-text">{{ t("fileText") }}</div>
-      </div>
     </div>
   </div>
   <BottomPopup
@@ -145,6 +164,12 @@
       @item-click="handleMentionSelect"
     ></MentionChooseList>
   </BottomPopup>
+  <!-- 拍摄 ActionSheet：选择拍照还是摄像 -->
+  <ActionSheet
+    v-model="cameraSheetVisible"
+    :actions="cameraActions"
+    @close="cameraSheetVisible = false"
+  />
 </template>
 
 <script lang="ts" setup>
@@ -186,6 +211,7 @@ import type { V2NIMMessage } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageS
 import { toast } from "../../utils/toast";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import BottomPopup from "../../CommonComponents/BottomPopup.vue";
+import ActionSheet from "../../CommonComponents/ActionSheet.vue";
 import MentionChooseList from "./mention-choose-list.vue";
 
 const { proxy } = getCurrentInstance()!; // 获取组件实例
@@ -220,6 +246,9 @@ const emojiVisible = ref(false);
 
 // 用于解决表情面板和键盘冲突，导致输入框滚动消失问题
 const showFakeInput = ref(false);
+
+// 拍摄 ActionSheet 显示状态
+const cameraSheetVisible = ref(false);
 
 // 回复消息相关
 const isReplyMsg = ref(false);
@@ -379,85 +408,14 @@ const findNewAtPosition = (newText: string, prevText: string): number => {
   return newText.lastIndexOf("@");
 };
 
-const findDeletePosition = (prevText: string, newText: string): number => {
-  const minLen = Math.min(prevText.length, newText.length);
-  for (let i = 0; i < minLen; i++) {
-    if (prevText[i] !== newText[i]) {
-      return i;
-    }
-  }
-  return newText.length;
-};
-
-const removeAtMemberResidue = (
-  member: { accountId: string; appellation: string },
-  newValue: string,
-  prevValue: string
-): string | null => {
-  const atText = `@${member.appellation}`;
-
-  if (newValue.includes(atText)) {
-    return null;
-  }
-
-  const posInPrev = prevValue.indexOf(atText);
-  if (posInPrev === -1) {
-    return null;
-  }
-
-  const deleteStart = findDeletePosition(prevValue, newValue);
-  if (deleteStart === -1) {
-    return null;
-  }
-
-  const atStart = posInPrev;
-  const atEnd = posInPrev + atText.length;
-  if (deleteStart < atStart || deleteStart >= atEnd) {
-    return null;
-  }
-
-  const beforeAt = prevValue.substring(0, atStart);
-  const afterAt = prevValue.substring(atEnd);
-  const residueStart = beforeAt.length;
-  const residueEnd = newValue.length - afterAt.length;
-
-  if (residueEnd <= residueStart) {
-    return null;
-  }
-
-  return newValue.substring(0, residueStart) + newValue.substring(residueEnd);
-};
-
-const handleAtMemberDelete = (
-  newValue: string,
-  prevValue: string
-): { text: string; membersToKeep: typeof selectedAtMembers.value } => {
-  if (selectedAtMembers.value.length === 0) {
-    return { text: newValue, membersToKeep: [] };
-  }
-
-  if (newValue.length >= prevValue.length) {
-    return { text: newValue, membersToKeep: selectedAtMembers.value };
-  }
-
-  let resultText = newValue;
-  const membersToKeep: typeof selectedAtMembers.value = [];
-
-  for (const member of selectedAtMembers.value) {
-    const atText = `@${member.appellation}`;
-    if (resultText.includes(atText)) {
-      membersToKeep.push(member);
-      continue;
-    }
-
-    const cleanedText = removeAtMemberResidue(member, resultText, prevValue);
-    if (cleanedText !== null) {
-      resultText = cleanedText;
-    }
-  }
-
-  return { text: resultText, membersToKeep };
-};
+// TODO: 暂时注释掉@成员整体删除相关逻辑，改为逐字删除
+// 原逻辑：删除@成员时整体删除"@王允"，因为做文本替换导致光标跳到末尾
+//
+// const findDeletePosition = (...) => { ... }
+//
+// const removeAtMemberResidue = (...) => { ... }
+//
+// const handleAtMemberDelete = (...) => { ... }
 
 const getInputValueFromEvent = (event): string => {
   if (typeof event === "string") {
@@ -476,13 +434,16 @@ const handleInputChange = (event) => {
     cursorPosition.value = msgInputRef.value.inputRef.selectionStart || 0;
   }
 
-  if (value.length < prevValue.length && selectedAtMembers.value.length > 0) {
-    const { text, membersToKeep } = handleAtMemberDelete(value, prevValue);
-    inputText.value = text;
-    prevInputText.value = text;
-    selectedAtMembers.value = membersToKeep;
-    return;
-  }
+  // TODO: 暂时注释掉@成员整体删除逻辑，改为逐字删除
+  // 原逻辑：删除@成员时整体删除"@王允"，导致光标跳到末尾
+  // 现在作为普通input，逐字删除即可
+  // if (value.length < prevValue.length && selectedAtMembers.value.length > 0) {
+  //   const { text, membersToKeep } = handleAtMemberDelete(value, prevValue);
+  //   inputText.value = text;
+  //   prevInputText.value = text;
+  //   selectedAtMembers.value = membersToKeep;
+  //   return;
+  // }
 
   prevInputText.value = value;
 
@@ -533,7 +494,11 @@ const handleSendTextMsg = () => {
       toast.info(t("sendMsgFailedText"));
     })
     .finally(() => {
-      emitter.emit(events.ON_SCROLL_BOTTOM);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          emitter.emit(events.ON_SCROLL_BOTTOM);
+        });
+      });
     });
 
   inputText.value = "";
@@ -591,21 +556,32 @@ const handleSendMoreVisible = () => {
   emitter.emit(events.ON_SCROLL_BOTTOM);
 };
 
-// 发送图片消息
+// 文件输入引用
 const imageInput = ref<HTMLInputElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
+const cameraPhotoInput = ref<HTMLInputElement | null>(null);
+const cameraVideoInput = ref<HTMLInputElement | null>(null);
 const FILE_SIZE_LIMIT = 200 * 1024 * 1024;
 
-// 处理图片选择
-const handleSendImageMsg = () => {
+// 拍摄：显示 ActionSheet 选择拍照还是摄像
+const handleCameraClick = () => {
   if (isTeamMute.value) return;
-  imageInput.value?.click();
+  cameraSheetVisible.value = true;
 };
 
-const handleSendFileMsg = () => {
-  if (isTeamMute.value) return;
-  fileInput.value?.click();
+const handleCameraAction = (type: "photo" | "video") => {
+  cameraSheetVisible.value = false;
+  if (type === "photo") {
+    cameraPhotoInput.value?.click();
+  } else {
+    cameraVideoInput.value?.click();
+  }
 };
+
+const cameraActions = computed(() => [
+  { text: "拍照", onClick: () => handleCameraAction("photo") },
+  { text: "摄像", onClick: () => handleCameraAction("video") },
+]);
 
 const isFileSizeValid = (file: File, input?: HTMLInputElement | null) => {
   if (file.size <= FILE_SIZE_LIMIT) return true;
@@ -616,29 +592,25 @@ const isFileSizeValid = (file: File, input?: HTMLInputElement | null) => {
   return false;
 };
 
-// 处理图片选择
+// 处理相册选择（图片和视频）
 const onImageSelected = async (event: Event) => {
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0];
 
   if (!file) return;
-
-  if (!file.type.startsWith("image/")) {
-    toast.info(t("selectImageText"));
-    return;
-  }
   if (!isFileSizeValid(file, imageInput.value)) return;
   emit("send-message");
 
-  try {
-    // 若图片超过 20MB，当作文件对象发送，与 React H5 保持一致。
-    const imgMsg =
-      file.size > 20 * 1024 * 1024
-        ? proxy?.$NIM.V2NIMMessageCreator.createFileMessage(file)
-        : proxy?.$NIM.V2NIMMessageCreator.createImageMessage(file);
+  const isVideo = file.type.startsWith("video/");
+  const fileMsg = isVideo
+    ? proxy?.$NIM.V2NIMMessageCreator.createVideoMessage(file)
+    : file.size > 20 * 1024 * 1024
+      ? proxy?.$NIM.V2NIMMessageCreator.createFileMessage(file)
+      : proxy?.$NIM.V2NIMMessageCreator.createImageMessage(file);
 
+  try {
     await store?.msgStore.sendMessageActive({
-      msg: imgMsg as unknown as V2NIMMessage,
+      msg: fileMsg as unknown as V2NIMMessage,
       conversationId,
       progress: () => true,
       sendBefore: () => {
@@ -649,7 +621,9 @@ const onImageSelected = async (event: Event) => {
     scrollBottom();
   } catch (err) {
     scrollBottom();
-    toast.info(t("sendImageFailedText"));
+    toast.info(
+      isVideo ? t("sendVideoFailedText") : t("sendImageFailedText")
+    );
   } finally {
     // 清空 input 的值，这样用户可以重复选择同一个文件
     if (imageInput.value) {
@@ -687,6 +661,56 @@ const onFileSelected = async (event: Event) => {
     if (fileInput.value) {
       fileInput.value.value = "";
     }
+  }
+};
+
+// 处理拍照选择
+const onCameraPhotoSelected = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+  if (!isFileSizeValid(file, cameraPhotoInput.value)) return;
+  emit("send-message");
+
+  const fileMsg = proxy?.$NIM.V2NIMMessageCreator.createImageMessage(file);
+  try {
+    await store?.msgStore.sendMessageActive({
+      msg: fileMsg as unknown as V2NIMMessage,
+      conversationId,
+      progress: () => true,
+      sendBefore: () => scrollBottom(),
+    });
+    scrollBottom();
+  } catch (err) {
+    scrollBottom();
+    toast.info(t("sendImageFailedText"));
+  } finally {
+    if (cameraPhotoInput.value) cameraPhotoInput.value.value = "";
+  }
+};
+
+// 处理摄像选择
+const onCameraVideoSelected = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+  if (!isFileSizeValid(file, cameraVideoInput.value)) return;
+  emit("send-message");
+
+  const fileMsg = proxy?.$NIM.V2NIMMessageCreator.createVideoMessage(file);
+  try {
+    await store?.msgStore.sendMessageActive({
+      msg: fileMsg as unknown as V2NIMMessage,
+      conversationId,
+      progress: () => true,
+      sendBefore: () => scrollBottom(),
+    });
+    scrollBottom();
+  } catch (err) {
+    scrollBottom();
+    toast.info(t("sendVideoFailedText"));
+  } finally {
+    if (cameraVideoInput.value) cameraVideoInput.value.value = "";
   }
 };
 
@@ -868,9 +892,8 @@ onUnmounted(() => {
   transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
   z-index: 999;
   display: flex;
-  height: 55px;
-  align-items: center;
-  padding: 4px 0;
+  flex-direction: column;
+  padding: 8px 0 0;
   box-sizing: border-box;
 }
 
@@ -878,90 +901,88 @@ onUnmounted(() => {
   background-color: #fff;
   font-size: 16px;
   border-radius: 6px;
-  margin-bottom: 5px;
   -webkit-tap-highlight-color: transparent;
 }
 
 .input-inner {
-  flex: 1;
-}
-
-.msg-input-button {
-  flex: 1;
-}
-
-.msg-input-button.msg-input-loading {
-  animation: loadingCircle 1s infinite linear;
-  z-index: 1;
-  width: 20px;
-  height: 20px;
-  margin-top: 4px;
-}
-
-.msg-input-button.msg-input-loading .loading {
   width: 100%;
-  height: 100%;
-}
-
-.msg-ext {
-  overflow-y: auto;
-  width: 100%;
-  height: 300px;
-  background-color: #eff1f3;
-  z-index: 1;
-}
-
-.msg-emoji-panel {
-  overflow-y: auto;
-  width: 100%;
-  height: 246px;
-  background-color: #eff1f3;
-  z-index: 1;
-}
-
-.msg-audio-panel {
-  overflow-y: hidden;
-  width: 100%;
-  height: 300px;
-  background-color: #eff1f3;
-  z-index: 1;
-}
-
-.send-more-panel {
-  padding: 15px;
-  overflow-y: hidden;
-  width: 100%;
-  height: 300px;
-  background-color: #eff1f3;
-  z-index: 1;
-  flex-wrap: wrap;
+  padding: 0 12px;
   box-sizing: border-box;
 }
 
-.send-more-panel-item-wrapper {
+.input-action-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 8px 12px;
+  box-sizing: border-box;
+}
+
+.input-action-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  border-radius: 6px;
+  -webkit-tap-highlight-color: transparent;
+  justify-self: center;
+}
+
+.input-action-icon:active {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.input-action-empty {
+  cursor: default;
+}
+
+.input-action-empty:active {
+  background-color: transparent;
+}
+
+.input-send-more {
+  justify-self: end;
+}
+
+.send-more-expand {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 8px 12px 12px;
+  box-sizing: border-box;
+}
+
+.send-more-expand-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  display: inline-block;
-  margin-bottom: 10px;
+  cursor: pointer;
+  position: relative;
+  justify-self: center;
 }
 
-.send-more-panel-item-wrapper .send-more-panel-item {
+.send-more-expand-icon {
+  width: 56px;
+  height: 56px;
   background-color: #fff;
   border-radius: 8px;
-  width: 60px;
-  height: 60px;
   display: flex;
   align-items: center;
-  margin: 0 15px;
   justify-content: center;
 }
 
-.send-more-panel-item-wrapper .icon-text {
-  font-size: 12px;
+.send-more-expand-label {
+  font-size: 11px;
   color: #747475;
-  margin-top: 8px;
+  margin-top: 6px;
   text-align: center;
+}
+
+.msg-emoji-panel {
+  width: 100%;
+  background-color: #fff;
+  z-index: 1;
 }
 
 .reply-message-wrapper {
@@ -1032,14 +1053,6 @@ onUnmounted(() => {
   border-radius: 6px;
 }
 
-.input-emoji-icon,
-.input-send-more {
-  width: 35px;
-  text-align: center;
-  height: 55px;
-  line-height: 55px;
-}
-
 .input-text {
   white-space: nowrap;
   color: #000;
@@ -1052,30 +1065,6 @@ onUnmounted(() => {
   font-size: 16px;
   border-radius: 6px;
   color: #c0c4cc;
-}
-
-.file-picker-wrapper {
-  position: absolute;
-  width: 60px;
-  height: 60px;
-  z-index: 1;
-}
-
-.file-picker-wrapper .files-button {
-  width: 60px;
-  height: 60px;
-}
-
-.send-more-panel-item {
-  position: relative;
-  background-color: #fff;
-  border-radius: 8px;
-  width: 60px;
-  height: 60px;
-  display: flex;
-  align-items: center;
-  margin: 0 15px;
-  justify-content: center;
 }
 
 .file-input-overlay {

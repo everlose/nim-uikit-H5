@@ -143,7 +143,7 @@ const gotoChat = async () => {
       const conversationId = nim?.V2NIMConversationIdUtil.p2pConversationId(to);
       await store?.uiStore.selectConversation(conversationId);
 
-      router.push(neUiKitRouterPath.chat);
+      router.push(`${neUiKitRouterPath.chat}?conversationId=${conversationId}`);
     } catch (error) {
       showToast({
         message: t("gotoChatFailText"),

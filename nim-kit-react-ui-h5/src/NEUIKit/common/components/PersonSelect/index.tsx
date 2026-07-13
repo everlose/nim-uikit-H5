@@ -57,6 +57,10 @@ export interface PersonSelectProps {
    * 按钮点击事件
    */
   onBtnClick?: () => void
+  /**
+   * 超过最大选择数量时触发
+   */
+  onMaxExceeded?: () => void
 }
 
 /**
@@ -69,7 +73,8 @@ const PersonSelect: React.FC<PersonSelectProps> = ({
   radio = false,
   max = Number.MAX_SAFE_INTEGER,
   onCheckboxChange,
-  onBtnClick
+  onBtnClick,
+  onMaxExceeded
 }) => {
   // 已选择的账号列表
   const [selectAccount, setSelectAccount] = useState<string[]>([])
@@ -100,9 +105,9 @@ const PersonSelect: React.FC<PersonSelectProps> = ({
       newSelectAccount = selectAccount.filter((id) => id !== accountId)
     } else {
       // 如果未选中，且未超过最大数量，则添加选择
-      if (selectAccount.length < max) {
-        newSelectAccount = [...selectAccount, accountId]
-      } else {
+      newSelectAccount = [...selectAccount, accountId]
+      if (newSelectAccount.length > max) {
+        onMaxExceeded?.()
         return // 已达最大选择数量
       }
     }
@@ -150,25 +155,37 @@ const PersonSelect: React.FC<PersonSelectProps> = ({
         ) : (
           /* 多选模式 */
           <div className="nim-checkbox-group">
-            {personList.map((item) => (
+            {personList.map((item) => {
+              const isChecked = selectAccount.includes(item.accountId)
+              const isMaxReached = selectAccount.length >= max && !isChecked
+              const isDisabled = item.disabled || isMaxReached
+              return (
               <div className="nim-member-item" key={item.accountId}>
-                <label className="nim-checkbox-label" onClick={(e) => handleCheckboxChange(e, item.accountId)}>
-                  <input
-                    type="checkbox"
-                    className="nim-checkbox-input"
-                    value={item.accountId}
-                    checked={selectAccount.includes(item.accountId)}
-                    disabled={item.disabled || (selectAccount.length >= max && !selectAccount.includes(item.accountId))}
-                    readOnly
-                  />
-                  <span className="nim-checkbox-custom"></span>
+                <label
+                  className={`nim-checkbox-label${isDisabled ? ' disabled' : ''}`}
+                  onClick={(e) => {
+                    if (item.disabled) return
+                    if (isMaxReached) {
+                      onMaxExceeded?.()
+                      return
+                    }
+                    handleCheckboxChange(e, item.accountId)
+                  }}
+                >
+                  <span className={`nim-checkbox-custom${isChecked ? ' checked' : ''}${isDisabled ? ' disabled' : ''}`}>
+                    {isChecked && (
+                      <svg viewBox="0 0 18 18" width="18" height="18" fill="none">
+                        <path d="M5.15 8.74L8 12.5L14.24 7.18" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </span>
                   <Avatar className="nim-user-avatar" size={36} account={item.accountId} teamId={item.teamId} />
                   <div className="nim-user-name">
                     <Appellation account={item.accountId} teamId={item.teamId} />
                   </div>
                 </label>
               </div>
-            ))}
+            )})}
           </div>
         )}
       </div>

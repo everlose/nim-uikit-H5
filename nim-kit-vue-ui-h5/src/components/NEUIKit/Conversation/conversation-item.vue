@@ -1,5 +1,6 @@
 <template>
   <div
+    ref="itemRef"
     :class="[
       'conversation-item-container',
       {
@@ -8,7 +9,6 @@
       },
     ]"
     @touchstart="handleTouchStart"
-    @touchmove="handleTouchMove"
     @click="() => handleConversationItemClick()"
   >
     <div class="conversation-item-content">
@@ -49,10 +49,10 @@
             <span v-if="beMentioned" class="beMentioned">
               {{ "[" + t("someoneText") + "@" + t("meText") + "]" }}
             </span>
-            <ConversationItemIsRead
+            <!-- <ConversationItemIsRead
               v-if="showSessionUnread"
               :conversation="props.conversation"
-            ></ConversationItemIsRead>
+            ></ConversationItemIsRead> -->
             <span
               v-if="props.conversation.lastMessage"
               class="conversation-item-desc-content"
@@ -89,13 +89,14 @@ import Avatar from "../CommonComponents/Avatar.vue";
 import AvatarWithStatus from "../CommonComponents/AvatarWithStatus.vue";
 import Appellation from "../CommonComponents/Appellation.vue";
 import Icon from "../CommonComponents/Icon.vue";
-import { computed, onUpdated, getCurrentInstance } from "vue";
+import { computed, ref, onMounted, onUnmounted, onUpdated, getCurrentInstance } from "vue";
 import dayjs from "dayjs";
 import { t } from "../utils/i18n";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import type {
   V2NIMConversationForUI,
   V2NIMLocalConversationForUI,
+  V2NIMMessageForUI,
 } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import ConversationItemIsRead from "./conversation-item-read.vue";
 import LastMsgContent from "./conversation-item-last-msg-content.vue";
@@ -172,9 +173,14 @@ const date = computed(() => {
   const _d = dayjs(time);
   const isCurrentDay = _d.isSame(dayjs(), "day");
   const isCurrentYear = _d.isSame(dayjs(), "year");
-  return _d.format(
-    isCurrentDay ? "HH:mm" : isCurrentYear ? "MM-DD HH:mm" : "YYYY-MM-DD HH:mm"
-  );
+
+  if (isCurrentDay) {
+    return _d.format("HH:mm");
+  }
+  if (isCurrentYear) {
+    return _d.format(t("timeFormatSameYear"));
+  }
+  return _d.format(t("timeFormatDiffYear"));
 });
 
 const max = 99;
@@ -192,12 +198,24 @@ const isMute = computed(() => {
 });
 
 const beMentioned = computed(() => {
-  if (props.conversation.aitMsgs?.length) {
-    return true;
-  }
+  const store = proxy?.$UIKitStore;
 
   if (props.conversation.unreadCount === 0) {
     return false;
+  }
+
+  if (props.conversation.aitMsgs?.length) {
+    // 从本地内存查找这些@消息
+    const aitMessages = store?.msgStore.getMsg(
+      props.conversation.conversationId,
+      props.conversation.aitMsgs
+    );
+    if (aitMessages && aitMessages.length > 0) {
+      // 找到了@消息，检查是否有消息时间 > 已读时间（即真正未读的@消息）
+      const lastReadTime = (props.conversation as V2NIMConversationForUI).lastReadTime ?? 0;
+      return aitMessages.some((msg: V2NIMMessageForUI) => msg.createTime > lastReadTime);
+    }
+    // 本地内存中没找到消息（如页面刷新后消息未加载），fallback 到 lastMessage 检测
   }
 
   const lastMsg = props.conversation.lastMessage;
@@ -242,26 +260,46 @@ const showSessionUnread = computed(() => {
   }
 });
 
-// 左滑显示 action 动画
+// 滑动阈值 & 左滑显示 action 动画
+const SWIPE_THRESHOLD = 60
 let startX = 0,
-  startY = 0;
-// 开始左滑
+  startY = 0
+let swipeTriggered = false
+const itemRef = ref<HTMLElement>()
+
 function handleTouchStart(event: TouchEvent) {
-  startX = event.changedTouches[0].pageX;
-  startY = event.changedTouches[0].pageY;
+  startX = event.changedTouches[0].pageX
+  startY = event.changedTouches[0].pageY
+  swipeTriggered = false
 }
 
+// touchmove 通过原生监听注册，以支持 { passive: false } 调用 preventDefault
 function handleTouchMove(event: TouchEvent) {
-  const moveEndX = event.changedTouches[0].pageX;
-  const moveEndY = event.changedTouches[0].pageY;
-  const X = moveEndX - startX + 20;
-  const Y = moveEndY - startY;
-  if (Math.abs(X) > Math.abs(Y) && X > 0) {
-    emit("leftSlide", null);
-  } else if (Math.abs(X) > Math.abs(Y) && X < 0) {
-    emit("leftSlide", props.conversation);
+  if (swipeTriggered) {
+    event.preventDefault()
+    return
+  }
+  const diffX = event.changedTouches[0].pageX - startX
+  const diffY = event.changedTouches[0].pageY - startY
+
+  if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > SWIPE_THRESHOLD) {
+    swipeTriggered = true
+    event.preventDefault()
+    if (diffX < 0) {
+      emit("leftSlide", props.conversation)
+    } else {
+      emit("leftSlide", null)
+    }
   }
 }
+
+onMounted(() => {
+  itemRef.value?.addEventListener('touchmove', handleTouchMove, { passive: false })
+})
+
+onUnmounted(() => {
+  itemRef.value?.removeEventListener('touchmove', handleTouchMove)
+})
 
 function handleConversationItemClick() {
   if (props.showMoreActions) {
@@ -282,6 +320,7 @@ onUpdated(() => {
   position: relative;
   transition: transform 0.3s;
   z-index: 9;
+  touch-action: pan-y;
 }
 
 .conversation-item-container.show-action-list {
@@ -336,6 +375,7 @@ onUpdated(() => {
   padding: 10px 20px 10px 15px;
   height: 72px;
   box-sizing: border-box;
+  user-select: none;
 }
 
 .conversation-item-left {
@@ -379,7 +419,7 @@ onUpdated(() => {
   font-size: 12px;
   color: #ccc;
   text-align: right;
-  width: 90px;
+  width: 105px;
   flex-shrink: 0;
 }
 

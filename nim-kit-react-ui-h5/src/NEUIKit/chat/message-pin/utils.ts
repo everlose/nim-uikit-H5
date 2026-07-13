@@ -22,6 +22,7 @@ export const canOperatePin = (msg: V2NIMMessageForUI) => {
     !!msg.messageServerId &&
     !msg.recallType &&
     msg.messageType !== V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM &&
+    msg.messageType !== V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CALL &&
     msg.sendingState === V2NIMConst.V2NIMMessageSendingState.V2NIM_MESSAGE_SENDING_STATE_SUCCEEDED
   )
 }

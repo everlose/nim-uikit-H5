@@ -1,11 +1,7 @@
 <template>
-  <a
+  <div
     class="msg-file-wrapper"
-    target="_blank"
-    rel="noopener noreferrer"
-    :href="downloadUrl"
-    :download="name"
-    :showUnderLine="false"
+    @click="() => downloadFile(url, name)"
   >
     <div
       :class="!msg.isSelf ? 'msg-file msg-file-in' : 'msg-file msg-file-out'"
@@ -20,13 +16,13 @@
       </div>
       <div class="msg-file-content">
         <div class="msg-file-title">
-          <div class="msg-file-title-prefix">{{ name }}</div>
+          <div class="msg-file-title-prefix">{{ prefixName }}</div>
           <div class="msg-file-title-suffix">{{ ext }}</div>
         </div>
         <div class="msg-file-size">{{ parseFileSize(size) }}</div>
       </div>
     </div>
-  </a>
+  </div>
 </template>
 
 <script lang="ts" setup>
@@ -36,6 +32,7 @@ import { computed } from "vue";
 import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import type { V2NIMMessageFileAttachment } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
+import { downloadFile } from "../../utils/file";
 
 const props = withDefaults(defineProps<{ msg: V2NIMMessageForUI }>(), {});
 
@@ -58,12 +55,12 @@ const {
   size = 0,
 } = (props.msg.attachment as V2NIMMessageFileAttachment) || {};
 
+// 去掉扩展名的文件名前缀
+const index = name.lastIndexOf(".");
+const prefixName = index > -1 ? name.slice(0, index) : name;
+
 // 获取文件类型图标
 const iconType = fileIconMap[getFileType(ext)] || "icon-weizhiwenjian";
-
-// 下载链接
-const downloadUrl =
-  url + ((url as string).includes("?") ? "&" : "?") + `download=${name}`;
 
 const uploadProgress = computed(() => {
   const progress = Number((props.msg as V2NIMMessageForUI & { uploadProgress?: number }).uploadProgress || 0);
@@ -97,15 +94,16 @@ const progressStyle = computed(() => ({
   display: flex;
   flex-direction: row;
   align-items: center;
-  padding: 12px 15px;
+  padding: 12px;
   border-radius: 8px;
   border: 1px solid #dee0e2;
   box-sizing: border-box;
+  background-color: #FFF;
 }
 
 .msg-file-icon-wrapper {
   position: relative;
-  width: 40px;
+  /* width: 40px; */
   height: 40px;
   flex: 0 0 auto;
   display: flex;
@@ -118,7 +116,10 @@ const progressStyle = computed(() => ({
 .msg-file-icon-wrapper-uploading::after {
   content: "";
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   background: rgba(0, 0, 0, 0.42);
   z-index: 2;
 }
@@ -131,7 +132,10 @@ const progressStyle = computed(() => ({
 
 .msg-file-upload-ring {
   position: absolute;
-  inset: 10px;
+  top: 10px;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
   border-radius: 50%;
   background: conic-gradient(
     #fff var(--file-upload-progress),
@@ -143,7 +147,10 @@ const progressStyle = computed(() => ({
 .msg-file-upload-ring::after {
   content: "";
   position: absolute;
-  inset: 4px;
+  top: 4px;
+  right: 4px;
+  bottom: 4px;
+  left: 4px;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.42);
 }
@@ -160,7 +167,11 @@ const progressStyle = computed(() => ({
 
 /* 文件内容区域 */
 .msg-file-content {
-  margin-left: 15px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  margin-left: 12px;
   flex: 1;
   min-width: 0;
 }
@@ -172,6 +183,7 @@ const progressStyle = computed(() => ({
   font-weight: 400;
   display: flex;
   min-width: 0;
+  line-height: 1;
 }
 
 /* 文件名前缀 */
@@ -185,6 +197,9 @@ const progressStyle = computed(() => ({
 
 /* 文件名后缀 */
 .msg-file-title-suffix {
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -199,6 +214,6 @@ const progressStyle = computed(() => ({
 .msg-file-size {
   color: #999;
   font-size: 10px;
-  margin-top: 4px;
+  line-height: 1;
 }
 </style>

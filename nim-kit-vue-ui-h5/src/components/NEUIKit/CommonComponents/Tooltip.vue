@@ -7,9 +7,12 @@
   >
     <div
       class="chat_tooltip_content"
-      @touchstart="handleTouchStart"
-      @touchend="handleTouchEnd"
-      @touchmove="handleTouchMove"
+      ref="tooltipContent"
+      @touchstart="_lpTouchStart"
+      @touchend="_lpTouchEnd"
+      @touchmove="_lpTouchMove"
+      @touchcancel="_lpTouchCancel"
+      @contextmenu.prevent="_lpContextMenu"
     >
       <slot></slot>
       <div
@@ -41,8 +44,11 @@
 </template>
 
 <script>
+import { longPressMixin } from "../utils/longPress";
+
 export default {
   name: "Tooltip",
+  mixins: [longPressMixin],
   props: {
     visible: Boolean,
     align: Boolean,
@@ -50,10 +56,6 @@ export default {
       type: String,
       default: "#303133",
     },
-    // placement: {
-    //   type: String,
-    //   default: 'top',
-    // },
     content: {
       type: String,
       default: "",
@@ -74,9 +76,10 @@ export default {
       style: {},
       arrowStyle: {},
       placement: "top",
-      touchTimer: null,
-      touchStartTime: 0,
-      touchStartPosition: null,
+      longPressOptions: {
+        duration: 500,
+        moveThreshold: 30,
+      },
     };
   },
   onLoad() {},
@@ -104,7 +107,15 @@ export default {
   },
   mounted() {
     // #ifdef H5
+    this.longPressOptions.onLongPress = this.handleClick;
+    this._lpInit(this.$refs.tooltipContent);
+
     window.addEventListener("click", () => {
+      // Android: 长按打开菜单后 touchend 会触发 click，短暂忽略
+      if (this._lpActive) {
+        this._lpActive = false;
+        return;
+      }
       this.isShow = false;
       this.popperRendered = false;
     });
@@ -146,7 +157,7 @@ export default {
           const windowHeight = window.innerHeight;
           const margin = 10;
           const gap = 8;
-          const touchPoint = this.touchStartPosition;
+          const touchPoint = this._lpStartPosition;
           const anchorX =
             touchPoint?.x || contentRect.left + contentRect.width / 2;
           const anchorY =
@@ -194,40 +205,6 @@ export default {
         }
       });
     },
-    handleTouchStart(e) {
-      this.touchStartTime = Date.now();
-      this.touchStartPosition = {
-        x: e.touches[0].clientX,
-        y: e.touches[0].clientY,
-      };
-
-      this.touchTimer = setTimeout(() => {
-        // 检查是否移动了太多
-        const currentX = e.touches[0].clientX;
-        const currentY = e.touches[0].clientY;
-        const moveDistance = Math.sqrt(
-          Math.pow(currentX - this.touchStartPosition.x, 2) +
-            Math.pow(currentY - this.touchStartPosition.y, 2)
-        );
-
-        if (moveDistance < 10) {
-          // 允许少量移动
-          this.handleClick();
-        }
-      }, 500); // 长按时间阈值：500ms
-    },
-
-    handleTouchEnd() {
-      clearTimeout(this.touchTimer);
-    },
-
-    handleTouchMove() {
-      clearTimeout(this.touchTimer);
-    },
-  },
-
-  beforeUnmount() {
-    clearTimeout(this.touchTimer);
   },
 };
 </script>
@@ -248,8 +225,10 @@ export default {
 
 .chat_tooltip_content {
   height: 100%;
+  line-height: 150%;
   position: relative;
   display: inline-block;
+  vertical-align: top;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   -khtml-user-select: none;
@@ -277,6 +256,9 @@ export default {
   white-space: nowrap;
   z-index: 99;
   background-color: #fff;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .chat_tooltip__mask {
@@ -288,6 +270,9 @@ export default {
   overflow: hidden;
   background-color: rgba(256, 256, 256, 0);
   z-index: 8;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .chat_popper__icon {

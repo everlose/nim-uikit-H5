@@ -12,6 +12,7 @@ const ValidListPage = lazy(() => import('./pages/contacts/validList'))
 const MyPage = lazy(() => import('./pages/user/my'))
 const MyDetailPage = lazy(() => import('./pages/user/myDetail'))
 const MyDetailEditPage = lazy(() => import('./pages/user/myDetailEdit'))
+const MyDetailGenderEditPage = lazy(() => import('./pages/user/myDetailGenderEdit'))
 const AboutNeteasePage = lazy(() => import('./pages/user/aboutNetease'))
 const SettingPage = lazy(() => import('./pages/user/setting'))
 const CollectionPage = lazy(() => import('./pages/user/collection'))
@@ -44,6 +45,7 @@ export const routes: RouteObject[] = [
   { path: 'my', element: <MyPage /> },
   { path: 'user/my-detail', element: <MyDetailPage /> },
   { path: 'user/my-detail-edit', element: <MyDetailEditPage /> },
+  { path: 'user/my-detail-gender-edit', element: <MyDetailGenderEditPage /> },
   { path: 'user/aboutNetease', element: <AboutNeteasePage /> },
   { path: 'user/setting', element: <SettingPage /> },
   { path: 'user/collection', element: <CollectionPage /> },

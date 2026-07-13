@@ -7,15 +7,7 @@ import {
 } from "../merged-forward/utils";
 
 export const MULTI_FORWARD_LIMIT = 10;
-export const MULTI_DELETE_BATCH_SIZE = 50;
-
-export const chunkMessages = <T>(messages: T[], size: number) => {
-  const result: T[][] = [];
-  for (let i = 0; i < messages.length; i += size) {
-    result.push(messages.slice(i, i + size));
-  }
-  return result;
-};
+export const MULTI_DELETE_LIMIT = 50;
 
 export const getMessageSelectKey = (
   msg?: Pick<

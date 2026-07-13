@@ -4,9 +4,13 @@
   overflow: auto;
   box-sizing: border-box;
 
-  /* 搜索区域样式 */
+  /* 搜索区域样式 —— sticky 固定在 NavBar 下方 */
   .search-wrapper {
     padding: 8px 10px;
+    position: sticky;
+    top: 48px;
+    z-index: 9998;
+    background-color: #fff;
   }
 
   /* 输入框容器 */

@@ -369,6 +369,7 @@ export const getAvatarBackgroundColor = (account: string): string => {
 
 /**
  * 复制文本到剪贴板
+ * 优先使用 execCommand（兼容性最好），失败时回退到 Clipboard API
  * @param text 要复制的文本
  */
 export const copyText = (text: string): Promise<void> => {
@@ -378,36 +379,39 @@ export const copyText = (text: string): Promise<void> => {
       return
     }
 
-    // 使用现代浏览器的Clipboard API
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).then(resolve).catch(reject)
-    } else {
-      // 回退方案：创建一个临时textarea元素
-      const textarea = document.createElement('textarea')
-      textarea.value = text
+    // 优先使用 execCommand，兼容性最好（特别是华为等国产浏览器）
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.top = '0'
+    textarea.style.left = '0'
+    textarea.style.opacity = '0'
+    textarea.style.pointerEvents = 'none'
 
-      // 防止滚动到底部
-      textarea.style.position = 'fixed'
-      textarea.style.top = '0'
-      textarea.style.left = '0'
-      textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.focus()
+    textarea.select()
 
-      document.body.appendChild(textarea)
-      textarea.focus()
-      textarea.select()
-
-      try {
-        // 执行复制命令
-        const successful = document.execCommand('copy')
-        if (successful) {
-          resolve()
+    try {
+      const successful = document.execCommand('copy')
+      document.body.removeChild(textarea)
+      if (successful) {
+        resolve()
+      } else {
+        // execCommand 失败，回退到 Clipboard API
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(text).then(resolve).catch(reject)
         } else {
           reject(new Error('复制失败'))
         }
-      } catch (err) {
-        reject(err)
-      } finally {
-        document.body.removeChild(textarea)
+      }
+    } catch {
+      document.body.removeChild(textarea)
+      // execCommand 抛异常，回退到 Clipboard API
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(resolve).catch(reject)
+      } else {
+        reject(new Error('复制失败'))
       }
     }
   })

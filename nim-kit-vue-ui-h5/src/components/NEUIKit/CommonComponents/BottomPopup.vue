@@ -1,28 +1,30 @@
 <template>
-  <div class="bottom-popup" v-if="modelValue">
-    <div class="popup-mask" @click="handleCancel"></div>
-    <div class="popup-content">
-      <div class="popup-header" v-if="showHeader">
-        <button
-          class="cancel-btn"
-          v-if="showCancel"
-          type="button"
-          :aria-label="t('cancelText')"
-          @click="handleCancel"
-        >
-          <Icon type="icon-jiantou" :size="18" />
-        </button>
-        <div v-if="title" class="popup-title">{{ title }}</div>
-        <div class="confirm-btn" v-if="showConfirm" @click="handleConfirm">
-          {{ t("okText") }}
+  <Transition name="bottom-popup-slide">
+    <div class="bottom-popup" v-if="modelValue">
+      <div class="popup-mask" @click="handleCancel"></div>
+      <div class="popup-content">
+        <div class="popup-header" v-if="showHeader">
+          <button
+            class="cancel-btn"
+            v-if="showCancel"
+            type="button"
+            :aria-label="t('cancelText')"
+            @click="handleCancel"
+          >
+            <Icon type="icon-jiantou" :size="18" />
+          </button>
+          <div v-if="title" class="popup-title">{{ title }}</div>
+          <div class="confirm-btn" v-if="showConfirm" @click="handleConfirm">
+            {{ t("okText") }}
+          </div>
+          <div v-else class="popup-header-placeholder"></div>
         </div>
-        <div v-else class="popup-header-placeholder"></div>
-      </div>
-      <div class="popup-body">
-        <slot></slot>
+        <div class="popup-body">
+          <slot></slot>
+        </div>
       </div>
     </div>
-  </div>
+  </Transition>
 </template>
 
 <script lang="ts" setup>
@@ -85,8 +87,27 @@ const handleCancel = () => {
   bottom: 0;
   background-color: #fff;
   border-radius: 12px 12px 0 0;
-  transform: translateY(0);
-  transition: transform 0.3s;
+}
+
+/* Transition animations */
+.bottom-popup-slide-enter-active,
+.bottom-popup-slide-leave-active {
+  transition: opacity 0.3s ease-out;
+}
+
+.bottom-popup-slide-enter-active .popup-content,
+.bottom-popup-slide-leave-active .popup-content {
+  transition: transform 0.3s ease-out;
+}
+
+.bottom-popup-slide-enter-from,
+.bottom-popup-slide-leave-to {
+  opacity: 0;
+}
+
+.bottom-popup-slide-enter-from .popup-content,
+.bottom-popup-slide-leave-to .popup-content {
+  transform: translateY(100%);
 }
 
 .popup-header {

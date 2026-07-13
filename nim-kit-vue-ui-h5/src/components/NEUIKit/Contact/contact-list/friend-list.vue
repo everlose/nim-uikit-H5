@@ -16,7 +16,7 @@
           :key="friend.accountId"
           @click="handleFriendItemClick(friend)"
         >
-          <AvatarWithStatus :account="friend.accountId" />
+          <AvatarWithStatus :account="friend.accountId" :size="36" />
           <div class="friend-name">{{ friend.appellation }}</div>
         </div>
       </div>
@@ -100,14 +100,15 @@ onUnmounted(() => {
 }
 
 .friend-item {
-  margin-top: 16px;
+  padding: 12px 0;
   display: flex;
   align-items: center;
 }
 .friend-name {
   margin-left: 12px;
   padding-right: 20px;
-  color: #000;
+  font-size: 16px;
+  color: #14131b;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;

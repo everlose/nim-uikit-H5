@@ -93,6 +93,9 @@ const props = withDefaults(
 
 const { proxy } = getCurrentInstance()!;
 const messageListRef = ref<HTMLElement | null>(null);
+let resizeObserver: ResizeObserver | null = null;
+let resizeRafId = 0;
+let onViewportResize: (() => void) | null = null;
 const broadcastNewAudioSrc = ref<string>("");
 const anchorScrolled = ref(false);
 const anchorScrollId = ref("");
@@ -300,6 +303,43 @@ onMounted(() => {
       scrollToBottom();
     }
   }, 100);
+
+  // 记录上一次的状态，用于判断 resize 前用户是否在底部
+  const prevState = { clientHeight: 0, distanceFromBottom: 0 };
+
+  // 滚动容器高度变化时（键盘弹起/收起、网络断开提示条等），若用户之前在底部附近则保持滚到底部
+  const scrollEl = messageListRef.value;
+  const scrollToBottomIfNear = () => {
+    const el = messageListRef.value;
+    if (!el) return;
+    const { scrollHeight, scrollTop, clientHeight } = el;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const wasNearBottom = prevState.distanceFromBottom < 48;
+    const isNearBottom = distanceFromBottom < 48;
+    // 容器变矮（键盘弹起）时，之前用户在底部附近 → 需要保持滚到底部
+    const containerShrunk = clientHeight < prevState.clientHeight;
+
+    if (isNearBottom || (wasNearBottom && containerShrunk)) {
+      el.scrollTop = scrollHeight;
+    }
+
+    prevState.clientHeight = clientHeight;
+    prevState.distanceFromBottom = distanceFromBottom;
+  };
+
+  if (scrollEl) {
+    resizeObserver = new ResizeObserver(() => {
+      cancelAnimationFrame(resizeRafId);
+      resizeRafId = requestAnimationFrame(scrollToBottomIfNear);
+    });
+    resizeObserver.observe(scrollEl);
+  }
+
+  // H5 键盘弹起/收起时 visualViewport 变化，但容器 CSS 尺寸可能不变，ResizeObserver 不触发
+  onViewportResize = () => {
+    scrollToBottomIfNear();
+  };
+  window.visualViewport?.addEventListener('resize', onViewportResize);
 });
 
 watch(
@@ -351,6 +391,13 @@ onUnmounted(() => {
   emitter.off(events.ON_SCROLL_BOTTOM, scrollToBottom);
   emitter.off(events.ON_LOAD_MORE, onLoadMore);
   teamWatch();
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  cancelAnimationFrame(resizeRafId);
+  if (onViewportResize) {
+    window.visualViewport?.removeEventListener('resize', onViewportResize);
+    onViewportResize = null;
+  }
 });
 </script>
 
@@ -363,6 +410,9 @@ onUnmounted(() => {
   box-sizing: border-box;
   transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
   background-color: #fff;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .msg-tip {

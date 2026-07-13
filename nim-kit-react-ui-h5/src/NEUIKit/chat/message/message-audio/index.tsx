@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { observer } from 'mobx-react-lite'
 import Icon from '@/NEUIKit/common/components/Icon'
-// import { events } from '@/NEUIKit/common/utils/constants'
-// import emitter from '@/NEUIKit/common/utils/eventBus'
+import { events } from '@/NEUIKit/common/utils/constants'
+import emitter from '@/NEUIKit/common/utils/eventBus'
 import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
 import type { V2NIMMessageAudioAttachment } from 'nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService'
 import './index.less'
@@ -23,8 +23,14 @@ interface MessageAudioProps {
 const MessageAudio: React.FC<MessageAudioProps> = observer(({ msg, mode, broadcastNewAudioSrc, voiceText }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [audioIconType, setAudioIconType] = useState('icon-yuyin3')
-  const [animationFlag, setAnimationFlag] = useState(false)
+  const animationFlagRef = useRef(false)
   const [isAudioPlaying, setIsAudioPlaying] = useState(false)
+  const isAudioPlayingRef = useRef(false)
+
+  // 同步 ref 以便在事件回调中读取最新值
+  useEffect(() => {
+    isAudioPlayingRef.current = isAudioPlaying
+  }, [isAudioPlaying])
 
   // 获取音频源
   const audioSrc = useMemo(() => {
@@ -55,12 +61,14 @@ const MessageAudio: React.FC<MessageAudioProps> = observer(({ msg, mode, broadca
     if (!audioRef.current) return
 
     if (isAudioPlaying) {
+      // 暂停并用 load() 强制重置音频元素
       audioRef.current.pause()
-      audioRef.current.currentTime = 0
+      audioRef.current.load()
+      animationFlagRef.current = false
       setIsAudioPlaying(false)
     } else {
-      // 发送事件通知其他音频停止播放
-      // emitter.emit(events.AUDIO_PLAY_CHANGE, msg.messageClientId)
+      // 每次播放都从头开始（暂停时已用 load 重置过）
+      emitter.emit(events.AUDIO_PLAY_CHANGE, msg.messageClientId)
       audioRef.current.play().catch((error) => {
         console.warn('播放音频失败:', error)
       })
@@ -74,24 +82,24 @@ const MessageAudio: React.FC<MessageAudioProps> = observer(({ msg, mode, broadca
   }
 
   const onAudioStop = () => {
-    setAnimationFlag(false)
+    animationFlagRef.current = false
     setIsAudioPlaying(false)
   }
 
   const onAudioEnded = () => {
-    setAnimationFlag(false)
+    animationFlagRef.current = false
     setIsAudioPlaying(false)
   }
 
   const onAudioError = () => {
-    setAnimationFlag(false)
+    animationFlagRef.current = false
     console.warn('音频播放出错')
   }
 
   // 播放音频动画
   const playAudioAnimation = () => {
     try {
-      setAnimationFlag(true)
+      animationFlagRef.current = true
       let audioIcons = ['icon-yuyin1', 'icon-yuyin2', 'icon-yuyin3']
 
       const handler = () => {
@@ -99,7 +107,7 @@ const MessageAudio: React.FC<MessageAudioProps> = observer(({ msg, mode, broadca
         if (icon) {
           setAudioIconType(icon)
 
-          if (!audioIcons.length && animationFlag) {
+          if (!audioIcons.length && animationFlagRef.current) {
             audioIcons = ['icon-yuyin1', 'icon-yuyin2', 'icon-yuyin3']
           }
 
@@ -115,30 +123,60 @@ const MessageAudio: React.FC<MessageAudioProps> = observer(({ msg, mode, broadca
     }
   }
 
-  // 监听其他音频的播放事件
-  // useEffect(() => {
-  //   const handleAudioPlayChange = (messageId: string) => {
-  //     if (messageId !== msg.messageClientId && isAudioPlaying) {
-  //       if (audioRef.current) {
-  //         audioRef.current.pause()
-  //         audioRef.current.currentTime = 0
-  //         setIsAudioPlaying(false)
-  //         setAnimationFlag(false)
-  //       }
-  //     }
-  //   }
+  // 监听其他音频的播放事件，实现互斥播放：同一时间只能有一条语音在播放
+  useEffect(() => {
+    const handleAudioPlayChange = (messageId: any) => {
+      if (messageId !== msg.messageClientId && isAudioPlayingRef.current) {
+        if (audioRef.current) {
+          audioRef.current.pause()
+          audioRef.current.load()
+          setIsAudioPlaying(false)
+          animationFlagRef.current = false
+        }
+      }
+    }
 
-  //   // emitter.on(events.AUDIO_PLAY_CHANGE, handleAudioPlayChange)
+    emitter.on(events.AUDIO_PLAY_CHANGE, handleAudioPlayChange)
 
-  //   return () => {
-  //     // 组件卸载时停止播放
-  //     // emitter.off(events.AUDIO_PLAY_CHANGE, handleAudioPlayChange)
-  //     if (audioRef.current) {
-  //       audioRef.current.pause()
-  //       audioRef.current.currentTime = 0
-  //     }
-  //   }
-  // }, [isAudioPlaying, msg.messageClientId])
+    return () => {
+      emitter.off(events.AUDIO_PLAY_CHANGE, handleAudioPlayChange)
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.currentTime = 0
+      }
+    }
+  }, [msg.messageClientId])
+
+  // 停止播放的通用方法
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.load()
+      setIsAudioPlaying(false)
+      animationFlagRef.current = false
+    }
+  }
+
+  // 监听全局停止音频事件（进入其他页面时停止播放）
+  useEffect(() => {
+    emitter.on(events.AUDIO_STOP_ALL, stopAudio)
+    return () => {
+      emitter.off(events.AUDIO_STOP_ALL, stopAudio)
+    }
+  }, [msg.messageClientId])
+
+  // 监听页面可见性变化（进入录制、拍照、图库等系统级页面时停止播放）
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopAudio()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [msg.messageClientId])
 
   const containerClass = !msg.isSelf || mode === 'audio-in' ? 'audio-in' : 'audio-out'
 

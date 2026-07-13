@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { observer } from 'mobx-react-lite'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
@@ -271,6 +271,54 @@ const MessageList: React.FC<MessageListProps> = observer(
         }
       }
     }, [autoScrollToBottom])
+
+    // 滚动容器高度变化时（键盘弹起/收起、网络断开提示条等），若用户之前在底部附近则保持滚到底部
+    useLayoutEffect(() => {
+      const el = messageListRef.current
+      if (!el) return
+
+      // 记录上一次的状态，用于判断 resize 前用户是否在底部
+      const prevStateRef = { clientHeight: 0, distanceFromBottom: 0 }
+
+      const scrollToBottomIfNear = () => {
+        const currentEl = messageListRef.current
+        if (!currentEl) return
+        const { scrollHeight, scrollTop, clientHeight } = currentEl
+        const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+        const prev = prevStateRef
+        const wasNearBottom = prev.distanceFromBottom < 48
+        const isNearBottom = distanceFromBottom < 48
+        // 容器变矮（键盘弹起）时，之前用户在底部附近 → 需要保持滚到底部
+        const containerShrunk = clientHeight < prev.clientHeight
+
+        if (isNearBottom || (wasNearBottom && containerShrunk)) {
+          currentEl.scrollTop = scrollHeight
+        }
+
+        // 更新状态快照
+        prev.clientHeight = clientHeight
+        prev.distanceFromBottom = distanceFromBottom
+      }
+
+      let rafId = 0
+      const observer = new ResizeObserver(() => {
+        cancelAnimationFrame(rafId)
+        rafId = requestAnimationFrame(scrollToBottomIfNear)
+      })
+      observer.observe(el)
+
+      // H5 键盘弹起/收起时 visualViewport 变化，但容器 CSS 尺寸可能不变，ResizeObserver 不触发
+      const onViewportResize = () => {
+        requestAnimationFrame(scrollToBottomIfNear)
+      }
+      window.visualViewport?.addEventListener('resize', onViewportResize)
+
+      return () => {
+        observer.disconnect()
+        cancelAnimationFrame(rafId)
+        window.visualViewport?.removeEventListener('resize', onViewportResize)
+      }
+    }, [])
 
     useEffect(() => {
       if (!anchorMessageClientId) return

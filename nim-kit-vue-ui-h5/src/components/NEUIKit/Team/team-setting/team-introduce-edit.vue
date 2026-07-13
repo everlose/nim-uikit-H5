@@ -48,6 +48,7 @@ import RootStore from "@xkit-yx/im-store-v2";
 import { useRouter } from "vue-router";
 import Button from "../../CommonComponents/Button.vue";
 import { toast } from "../../utils/toast";
+import { useTeamNotification } from "../../composables/useTeamNotification";
 
 const router = useRouter();
 const { proxy } = getCurrentInstance()!;
@@ -56,6 +57,7 @@ let hasPermission = ref<boolean>(false);
 
 const inputValue = ref<string>();
 let teamId = "";
+useTeamNotification(() => teamId);
 // 用于是修改群名称还是群介绍
 const type = ref<string>();
 
@@ -106,7 +108,7 @@ const handleSave = () => {
 
 const handleInput = (event) => {
   const value = event.target.value;
-  inputValue.value = value ? value.replace(/\s*/g, "") : value;
+  inputValue.value = value ? value.trim() : value;
 };
 
 onMounted(() => {

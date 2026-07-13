@@ -9,10 +9,14 @@
       <div class="logo-box">
         <div>{{ t("contactText") }}</div>
       </div>
-      <div :class="buttonClass">
-        <div @click="showAddDropdown">
-          <Icon type="icon-More" :size="24" />
+      <div class="right-actions">
+        <div class="button-icon-search" @click="goToSearchPage">
+          <Icon type="icon-sousuo" :size="20" />
         </div>
+        <div :class="buttonClass">
+          <div @click="showAddDropdown">
+            <Icon type="icon-add" :size="20" />
+          </div>
         <div v-if="addDropdownVisible" class="dropdown-container">
           <div class="add-menu-list">
             <div class="add-menu-item" @click="onDropdownClick('addFriend')">
@@ -28,6 +32,7 @@
               {{ t("createTeamText") }}
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -142,6 +147,11 @@ const hideAddDropdown = () => {
   addDropdownVisible.value = false;
 };
 
+/** 跳转至搜索页面 */
+const goToSearchPage = () => {
+  router.push(neUiKitRouterPath.conversationSearch);
+};
+
 let buttonClass = "button-box";
 
 onUnmounted(() => {
@@ -220,11 +230,9 @@ onUnmounted(() => {
 
 /* 联系人图标基础样式 */
 .contact-item-icon {
-  height: 42px;
-  width: 42px;
   border-radius: 50%;
   text-align: center;
-  line-height: 39px;
+  line-height: 33px;
   font-size: 20px;
   color: #fff;
 }
@@ -248,7 +256,7 @@ onUnmounted(() => {
 .contact-item-title {
   margin-left: 12px;
   font-size: 16px;
-  color: #000;
+  color: #14131b;
   flex: 1;
 }
 
@@ -256,6 +264,17 @@ onUnmounted(() => {
 .more-icon {
   margin: 0 16px;
   color: #999999;
+}
+
+.right-actions {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.button-icon-search {
+  cursor: pointer;
+  color: #333;
 }
 
 /* 下拉遮罩 */

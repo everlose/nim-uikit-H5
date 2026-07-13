@@ -1,7 +1,7 @@
 <template>
   <!-- 收到的消息 -->
   <Tooltip
-    v-if="!props.readonly && !props.msg.isSelf && !props.isMultiSelecting"
+    v-if="!props.readonly && !props.msg.isSelf && !props.isMultiSelecting && !props.msg.recallType"
     :placement="placement"
     ref="tooltipRef"
     color="white"
@@ -62,6 +62,21 @@
           ></Icon>
           <text class="msg-action-btn-text">{{ t("forwardText") }}</text>
         </div>
+        <div
+          v-if="canPinMsg"
+          class="msg-action-btn"
+          @click="handlePinMsg"
+        >
+          <Icon
+            :size="18"
+            color="#656A72"
+            class="msg-action-btn-icon"
+            type="icon-pin"
+          ></Icon>
+          <text class="msg-action-btn-text">{{
+            pinned ? t("unpinText") : t("pinText")
+          }}</text>
+        </div>
 
         <div class="msg-action-btn" @click="handleDeleteMsg">
           <Icon
@@ -93,21 +108,6 @@
             type="icon-voice-to-text"
           ></Icon>
           <text class="msg-action-btn-text">{{ t("voiceToTextText") }}</text>
-        </div>
-        <div
-          v-if="canPinMsg"
-          class="msg-action-btn"
-          @click="handlePinMsg"
-        >
-          <Icon
-            :size="18"
-            color="#656A72"
-            class="msg-action-btn-icon"
-            type="icon-pin"
-          ></Icon>
-          <text class="msg-action-btn-text">{{
-            pinned ? t("unpinText") : t("pinText")
-          }}</text>
         </div>
         <div
           v-if="canCollectMsg"
@@ -184,8 +184,8 @@
             actionGroupStyle(
               props.msg.messageType ===
                 V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT
-                ? 2
-                : 1
+                ? 3
+                : 2
             )
           "
         >
@@ -213,6 +213,15 @@
               type="icon-shanchu"
             ></Icon>
             <text class="msg-action-btn-text">{{ t("deleteText") }}</text>
+          </div>
+          <div class="msg-action-btn" @click="handleMultiSelect">
+            <Icon
+              :size="18"
+              color="#656A72"
+              class="msg-action-btn-icon"
+              type="icon-multi-select"
+            ></Icon>
+            <text class="msg-action-btn-text">{{ t("multiSelectText") }}</text>
           </div>
         </div>
       </template>
@@ -256,8 +265,8 @@
               actionGroupStyle(
                 props.msg.messageType ===
                   V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT
-                  ? 2
-                  : 1
+                  ? 3
+                  : 2
               )
             "
           >
@@ -285,6 +294,15 @@
                 type="icon-shanchu"
               ></Icon>
               <text class="msg-action-btn-text">{{ t("deleteText") }}</text>
+            </div>
+            <div class="msg-action-btn" @click="handleMultiSelect">
+              <Icon
+                :size="18"
+                color="#656A72"
+                class="msg-action-btn-icon"
+                type="icon-multi-select"
+              ></Icon>
+              <text class="msg-action-btn-text">{{ t("multiSelectText") }}</text>
             </div>
           </div>
         </template>
@@ -318,7 +336,7 @@
   </div>
   <!-- 发出的消息 -->
   <Tooltip
-    v-else-if="tooltipVisible && !props.readonly && !props.isMultiSelecting"
+    v-else-if="tooltipVisible && !props.readonly && !props.isMultiSelecting && !props.msg.recallType"
     :placement="placement"
     ref="tooltipRef"
     color="white"
@@ -380,6 +398,21 @@
           ></Icon>
           <text class="msg-action-btn-text">{{ t("forwardText") }}</text>
         </div>
+        <div
+          v-if="canPinMsg"
+          class="msg-action-btn"
+          @click="handlePinMsg"
+        >
+          <Icon
+            :size="18"
+            color="#656A72"
+            class="msg-action-btn-icon"
+            type="icon-pin"
+          ></Icon>
+          <text class="msg-action-btn-text">{{
+            pinned ? t("unpinText") : t("pinText")
+          }}</text>
+        </div>
 
         <div class="msg-action-btn" @click="handleDeleteMsg">
           <Icon
@@ -420,21 +453,6 @@
             type="icon-voice-to-text"
           ></Icon>
           <text class="msg-action-btn-text">{{ t("voiceToTextText") }}</text>
-        </div>
-        <div
-          v-if="canPinMsg"
-          class="msg-action-btn"
-          @click="handlePinMsg"
-        >
-          <Icon
-            :size="18"
-            color="#656A72"
-            class="msg-action-btn-icon"
-            type="icon-pin"
-          ></Icon>
-          <text class="msg-action-btn-text">{{
-            pinned ? t("unpinText") : t("pinText")
-          }}</text>
         </div>
         <div
           v-if="canCollectMsg"
@@ -570,8 +588,9 @@ const isFriend = ref(true);
 // 未知消息
 const isUnknownMsg = ref(false);
 const pinned = computed(() => isMessagePinned(props.msg));
-const canPinMsg = computed(() => canOperatePin(props.msg));
-const canCollectMsg = computed(() => canCollectMessage(props.msg));
+const isMergedForward = computed(() => store?.msgStore.isChatMergedForwardMsg(props.msg));
+const canPinMsg = computed(() => canOperatePin(props.msg) || isMergedForward.value);
+const canCollectMsg = computed(() => canCollectMessage(props.msg) || isMergedForward.value);
 const messageStatusErrorCode = computed(() => props.msg.messageStatus?.errorCode);
 const isMessageStatusFailed = computed(
   () =>
@@ -671,12 +690,18 @@ const handleResendMsg = async () => {
     _msg.messageClientId,
   ]);
 
+  // 恢复回复消息状态，确保重发失败回复消息时保持回复关系
+  const threadReply = (_msg as any).threadReply
+  if (threadReply) {
+    store?.msgStore.replyMsgActive(threadReply)
+  }
+
   try {
     switch (_msg.messageType) {
       case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_IMAGE:
       case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_VIDEO:
       case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_FILE:
-        store?.msgStore.sendMessageActive({
+        await store?.msgStore.sendMessageActive({
           msg: _msg,
           conversationId: _msg.conversationId,
           progress: () => true,
@@ -686,7 +711,7 @@ const handleResendMsg = async () => {
         });
         break;
       case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT:
-        store?.msgStore.sendMessageActive({
+        await store?.msgStore.sendMessageActive({
           msg: _msg,
           conversationId: _msg.conversationId,
           sendBefore: () => {
@@ -695,7 +720,7 @@ const handleResendMsg = async () => {
         });
         break;
       default:
-        store?.msgStore.sendMessageActive({
+        await store?.msgStore.sendMessageActive({
           msg: _msg,
           conversationId: _msg.conversationId,
           sendBefore: () => {
@@ -704,9 +729,12 @@ const handleResendMsg = async () => {
         });
         break;
     }
-    scrollBottom();
   } catch (error) {
-    console.log(error);
+    showToast(t('resendMsgFailText'));
+  } finally {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => scrollBottom())
+    })
   }
 };
 
@@ -783,8 +811,20 @@ const handleCollectMsg = async () => {
     if (!converter) {
       throw new Error("V2NIMMessageConverter unavailable");
     }
+
+    const conversationType = nim.V2NIMConversationIdUtil.parseConversationType(props.msg.conversationId);
+    const isTeamMessage = conversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM;
+    const teamId = isTeamMessage ? nim.V2NIMConversationIdUtil.parseConversationTargetId(props.msg.conversationId) : undefined;
+    const conversation = store?.sdkOptions?.enableV2CloudConversation
+      ? store?.conversationStore?.conversations.get(props.msg.conversationId)
+      : store?.localConversationStore?.conversations.get(props.msg.conversationId);
+
     await store?.msgStore.addCollectionActive(
-      createMessageCollectionParams(props.msg, converter)
+      createMessageCollectionParams(props.msg, converter, {
+        conversationName: conversation?.name,
+        senderName: store?.uiStore.getAppellation({ account: props.msg.senderId, teamId }),
+        avatar: store?.userStore.users.get(props.msg.senderId)?.avatar,
+      })
     );
     showToast({ message: t("addCollectionSuccessText"), type: "info" });
   } catch (error) {
@@ -884,7 +924,14 @@ const handleDeleteMsg = () => {
 };
 
 // 添加好友
-const addFriend = () => {
+const addFriend = async () => {
+  // 仅在锚点模式下移除 URL 中的 anchorMessageClientId，防止从好友页返回后仍锚点到标记消息
+  if (router.currentRoute.value.query.anchorMessageClientId) {
+    await router.replace({
+      path: neUiKitRouterPath.chat,
+      query: { conversationId: router.currentRoute.value.query.conversationId },
+    });
+  }
   router.push({
     path: neUiKitRouterPath.friendCard,
     query: {
@@ -979,6 +1026,9 @@ onUnmounted(() => {
   max-width: 63vw;
   overflow: hidden;
   padding: 12px 16px;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .msg-bg-in {
@@ -1050,7 +1100,7 @@ onUnmounted(() => {
   color: #b3b7bc;
   font-size: 14px;
   position: relative;
-  right: 20%;
+  text-align: right;
   margin: 10px 0;
 }
 

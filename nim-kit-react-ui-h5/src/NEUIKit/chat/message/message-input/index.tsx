@@ -18,6 +18,7 @@ import type { V2NIMMessage } from 'nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageS
 import type { V2NIMTeam, V2NIMTeamChatBannedMode, V2NIMTeamMember } from 'nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService'
 import './index.less'
 import BottomPopup from '@/NEUIKit/common/components/BottomPopup'
+import ActionSheet from '@/NEUIKit/common/components/ActionSheet'
 import MentionChooseList from '../mention-choose-list'
 import { flushSync } from 'react-dom'
 
@@ -56,6 +57,9 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
 
   // 用于解决表情面板和键盘冲突，导致输入框滚动消失问题
   const [showFakeInput, setShowFakeInput] = useState(false)
+
+  // 拍摄 ActionSheet 显示状态
+  const [cameraSheetVisible, setCameraSheetVisible] = useState(false)
 
   // 回复消息相关
   const [isReplyMsg, setIsReplyMsg] = useState(false)
@@ -98,10 +102,14 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
     return true;
   }, [team?.serverExtension, isTeamOwner, isTeamManager]);
 
-  // 图片输入引用
+  // 图片输入引用（相册，支持图片和视频）
   const imageInputRef = useRef<HTMLInputElement>(null)
   // 文件输入引用
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // 拍照输入引用
+  const cameraPhotoInputRef = useRef<HTMLInputElement>(null)
+  // 摄像输入引用
+  const cameraVideoInputRef = useRef<HTMLInputElement>(null)
   const FILE_SIZE_LIMIT = 200 * 1024 * 1024
 
   // 处理输入框聚焦
@@ -159,7 +167,9 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
         toast.info(t('sendMsgFailedText'))
       })
       .finally(() => {
-        scrollBottom()
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => scrollBottom())
+        })
       })
 
     setInputText('')
@@ -269,7 +279,7 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
       }
 
       if (target) {
-        setInputText((prev) => prev.replace(new RegExp(`${target}$`), ''))
+        setInputText((prev) => prev.slice(0, -target.length))
       }
     } else {
       // 否则删除最后一个字符
@@ -287,15 +297,20 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
     scrollBottom()
   }
 
-  // 发送图片消息
-  const handleSendImageMsg = () => {
+  // 拍摄：显示 ActionSheet 选择拍照还是摄像
+  const handleCameraClick = () => {
     if (isTeamMute) return
-    imageInputRef.current?.click()
+    setCameraSheetVisible(true)
   }
 
-  const handleSendFileMsg = () => {
-    if (isTeamMute) return
-    fileInputRef.current?.click()
+  // 拍摄：拍照
+  const handleCameraPhoto = () => {
+    cameraPhotoInputRef.current?.click()
+  }
+
+  // 拍摄：摄像
+  const handleCameraVideo = () => {
+    cameraVideoInputRef.current?.click()
   }
 
   const isFileSizeValid = (file: File, input?: HTMLInputElement | null) => {
@@ -307,21 +322,20 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
     return false
   }
 
-  // 处理图片选择
+  // 处理相册选择（图片和视频）
   const onImageSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-
     if (!file) return
 
-    if (!file.type.startsWith('image/')) {
-      toast.info(t('selectImageText'))
-      return
-    }
     if (!isFileSizeValid(file, imageInputRef.current)) return
     onSendMessage?.()
 
-    // 补充: 若图片超过 20MB, 当作文件对象发送而不是图片发送.
-    const fileMsg = file.size > 20 * 1024 * 1024 ? nim.V2NIMMessageCreator.createFileMessage(file) : nim.V2NIMMessageCreator.createImageMessage(file)
+    const isVideo = file.type.startsWith('video/')
+    const fileMsg = isVideo
+      ? nim.V2NIMMessageCreator.createVideoMessage(file)
+      : file.size > 20 * 1024 * 1024
+        ? nim.V2NIMMessageCreator.createFileMessage(file)
+        : nim.V2NIMMessageCreator.createImageMessage(file)
 
     try {
       await store.msgStore.sendMessageActive({
@@ -332,13 +346,11 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
           scrollBottom()
         }
       })
-
       scrollBottom()
     } catch (err) {
       scrollBottom()
-      toast.info(t('sendImageFailedText'))
+      toast.info(isVideo ? t('sendVideoFailedText') : t('sendImageFailedText'))
     } finally {
-      // 清空 input 的值，这样用户可以重复选择同一个文件
       if (imageInputRef.current) {
         imageInputRef.current.value = ''
       }
@@ -373,6 +385,66 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
       // 清空 input 的值，这样用户可以重复选择同一个文件
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  // 处理拍照选择
+  const onCameraPhotoSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!isFileSizeValid(file, cameraPhotoInputRef.current)) return
+    onSendMessage?.()
+
+    const fileMsg = nim.V2NIMMessageCreator.createImageMessage(file)
+
+    try {
+      await store.msgStore.sendMessageActive({
+        msg: fileMsg as unknown as V2NIMMessage,
+        conversationId,
+        progress: () => true,
+        sendBefore: () => {
+          scrollBottom()
+        }
+      })
+      scrollBottom()
+    } catch (err) {
+      scrollBottom()
+      toast.info(t('sendImageFailedText'))
+    } finally {
+      if (cameraPhotoInputRef.current) {
+        cameraPhotoInputRef.current.value = ''
+      }
+    }
+  }
+
+  // 处理摄像选择
+  const onCameraVideoSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!isFileSizeValid(file, cameraVideoInputRef.current)) return
+    onSendMessage?.()
+
+    const fileMsg = nim.V2NIMMessageCreator.createVideoMessage(file)
+
+    try {
+      await store.msgStore.sendMessageActive({
+        msg: fileMsg as unknown as V2NIMMessage,
+        conversationId,
+        progress: () => true,
+        sendBefore: () => {
+          scrollBottom()
+        }
+      })
+      scrollBottom()
+    } catch (err) {
+      scrollBottom()
+      toast.info(t('sendVideoFailedText'))
+    } finally {
+      if (cameraVideoInputRef.current) {
+        cameraVideoInputRef.current.value = ''
       }
     }
   }
@@ -438,124 +510,40 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
     }, 50)
   }
 
-  /**
-   * 检测单个@成员是否被部分删除，如果是则返回删除残留后的文本
-   */
-  const removeAtMemberResidue = (
-    member: { accountId: string; appellation: string },
-    newValue: string,
-    prevValue: string
-  ): string | null => {
-    const atText = `@${member.appellation}`
-    
-    // @xxx在新文本中完整存在，不需要处理
-    if (newValue.includes(atText)) {
-      return null
-    }
-    
-    // 查找旧文本中@xxx的位置
-    const posInPrev = prevValue.indexOf(atText)
-    if (posInPrev === -1) {
-      return null
-    }
-    
-    // @xxx在旧文本中存在但在新文本中不完整，说明被部分删除
-    const deleteStart = findDeletePosition(prevValue, newValue)
-    if (deleteStart === -1) {
-      return null
-    }
-    
-    // 检查删除位置是否在@xxx范围内
-    const atStart = posInPrev
-    const atEnd = posInPrev + atText.length
-    if (deleteStart < atStart || deleteStart >= atEnd) {
-      return null
-    }
-    
-    // 删除发生在@xxx内部，需要整体删除@xxx的残留部分
-    const beforeAt = prevValue.substring(0, atStart)
-    const afterAt = prevValue.substring(atEnd)
-    
-    // 计算残留部分在新文本中的位置
-    const residueStart = beforeAt.length
-    const residueEnd = newValue.length - afterAt.length
-    
-    if (residueEnd <= residueStart) {
-      return null
-    }
-    
-    // 返回删除残留部分后的文本
-    return newValue.substring(0, residueStart) + newValue.substring(residueEnd)
-  }
-
-  /**
-   * 检测@成员是否被部分删除，如果是则整体删除
-   * 返回处理后的文本和需要保留的@成员列表
-   */
-  const handleAtMemberDelete = (newValue: string, prevValue: string): { text: string; membersToKeep: typeof selectedAtMembers } => {
-    // 如果没有@成员，不需要处理
-    if (selectedAtMembers.length === 0) {
-      return { text: newValue, membersToKeep: [] }
-    }
-    
-    // 如果文本长度增加或不变，不需要处理删除逻辑
-    if (newValue.length >= prevValue.length) {
-      return { text: newValue, membersToKeep: selectedAtMembers }
-    }
-    
-    let resultText = newValue
-    const membersToKeep: typeof selectedAtMembers = []
-    
-    // 遍历所有@成员，检查其对应的@xxx是否仍完整存在
-    for (const member of selectedAtMembers) {
-      const atText = `@${member.appellation}`
-      
-      // 检查新文本中是否完整包含@xxx
-      if (resultText.includes(atText)) {
-        membersToKeep.push(member)
-        continue
-      }
-      
-      // @xxx不完整存在，尝试删除残留部分
-      const cleanedText = removeAtMemberResidue(member, resultText, prevValue)
-      if (cleanedText !== null) {
-        resultText = cleanedText
-      }
-    }
-    
-    return { text: resultText, membersToKeep }
-  }
-  
-  /**
-   * 查找删除操作发生的位置
-   * 通过比较新旧文本找出删除的起始位置
-   */
-  const findDeletePosition = (prevText: string, newText: string): number => {
-    // 从头开始比较，找到第一个不同的位置
-    const minLen = Math.min(prevText.length, newText.length)
-    for (let i = 0; i < minLen; i++) {
-      if (prevText[i] !== newText[i]) {
-        return i
-      }
-    }
-    // 如果前面都相同，删除发生在末尾
-    return newText.length
-  }
+  // TODO: 暂时注释掉@成员整体删除相关逻辑，改为逐字删除
+  // 原逻辑：删除@成员时整体删除"@王允"，因为做文本替换导致光标跳到末尾
+  //
+  // /**
+  //  * 检测单个@成员是否被部分删除，如果是则返回删除残留后的文本
+  //  */
+  // const removeAtMemberResidue = (...) => { ... }
+  //
+  // /**
+  //  * 检测@成员是否被部分删除，如果是则整体删除
+  //  */
+  // const handleAtMemberDelete = (...) => { ... }
+  //
+  // /**
+  //  * 查找删除操作发生的位置
+  //  */
+  // const findDeletePosition = (...) => { ... }
 
   const handleInputChange = (value: string) => {
     const prevValue = prevInputTextRef.current
-    
-    // 处理@成员的整体删除逻辑
-    if (value.length < prevValue.length && selectedAtMembers.length > 0) {
-      const { text, membersToKeep } = handleAtMemberDelete(value, prevValue)
-      
-      // 更新状态
-      setInputText(text)
-      prevInputTextRef.current = text
-      setSelectedAtMembers(membersToKeep)
-      return
-    }
-    
+
+    // TODO: 暂时注释掉@成员整体删除逻辑，改为逐字删除
+    // 原逻辑：删除@成员时整体删除"@王允"，导致光标跳到末尾
+    // 现在作为普通input，逐字删除即可
+    // if (value.length < prevValue.length && selectedAtMembers.length > 0) {
+    //   const { text, membersToKeep } = handleAtMemberDelete(value, prevValue)
+    //
+    //   // 更新状态
+    //   setInputText(text)
+    //   prevInputTextRef.current = text
+    //   setSelectedAtMembers(membersToKeep)
+    //   return
+    // }
+
     // 更新状态（无论如何都要执行）
     setInputText(value)
     prevInputTextRef.current = value
@@ -769,7 +757,7 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
           // 在输入框中添加@被回复人
           setInputText((prev) => {
             const atText = `@${appellation} `
-            const newText = atText + prev
+            const newText = prev + atText
             // 同步更新 prevInputTextRef，避免触发重复的@检测
             prevInputTextRef.current = newText
             return newText
@@ -854,14 +842,10 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
 
       {/* 输入区域 */}
       <div className="msg-input-wrapper">
-        <div className="input-emoji-icon" onClick={handleEmojiVisible}>
-          <Icon size={24} type="icon-biaoqing" />
-        </div>
-
         <div className="input-inner">
-          {/* 
+          {/*
             当从表情面板切换到文字输入时，直接唤起键盘，会导致input框滚动消失
-            此处使用fake Input兼容，保证先隐藏表情/其他面板，再弹出键盘 
+            此处使用fake Input兼容，保证先隐藏表情/其他面板，再弹出键盘
           */}
           {showFakeInput ? (
             <div className="fake-input" onClick={onHideFakeInput}>
@@ -891,35 +875,63 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
           )}
         </div>
 
-        <div className="input-send-more" onClick={handleSendMoreVisible}>
-          <Icon type="send-more" size={24} />
+        {/* 操作栏：四列布局，与 Android 对齐 */}
+        <div className="input-action-bar">
+          <div className="input-action-icon" onClick={handleEmojiVisible}>
+            <Icon size={24} type={emojiVisible ? 'icon-emoji-active' : 'icon-emoji-normal'} />
+          </div>
+          <div className="input-action-icon">
+            <input
+              type="file"
+              ref={imageInputRef}
+              accept="image/*,video/*"
+              className="file-input-overlay"
+              style={{ pointerEvents: isTeamMute ? 'none' : 'auto' }}
+              onChange={onImageSelected}
+            />
+            <Icon size={24} type="icon-tupian" />
+          </div>
+          <div className="input-action-icon input-action-empty" />
+          <div className={`input-action-icon input-send-more ${sendMoreVisible ? 'active' : ''}`} onClick={handleSendMoreVisible}>
+            <Icon type={sendMoreVisible ? 'icon-more-active' : 'icon-more-normal'} size={24} />
+          </div>
         </div>
+
+        {/* 更多操作扩展区 */}
+        {sendMoreVisible && (
+          <div className="send-more-expand" onClick={(e) => e.stopPropagation()}>
+            <div className="send-more-expand-item" onClick={handleCameraClick}>
+              <div className="send-more-expand-icon">
+                <Icon size={26} type="icon-paishe" />
+              </div>
+              <div className="send-more-expand-label">拍摄</div>
+            </div>
+            <div className="send-more-expand-item">
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="*/*"
+                className="file-input-overlay"
+                style={{ pointerEvents: isTeamMute ? 'none' : 'auto' }}
+                onChange={onFileSelected}
+              />
+              <div className="send-more-expand-icon">
+                <Icon size={26} type="icon-wenjian" />
+              </div>
+              <div className="send-more-expand-label">{t('fileText')}</div>
+            </div>
+          </div>
+        )}
+
+        {/* 隐藏的拍照和摄像 input（由 ActionSheet 触发） */}
+        <input type="file" ref={cameraPhotoInputRef} accept="image/*" capture="environment" style={{ display: 'none' }} onChange={onCameraPhotoSelected} />
+        <input type="file" ref={cameraVideoInputRef} accept="video/*" capture="environment" style={{ display: 'none' }} onChange={onCameraVideoSelected} />
       </div>
 
       {/* 表情面板 */}
       {emojiVisible && (
         <div className="msg-emoji-panel" onClick={(e) => e.stopPropagation()}>
           <Face onEmojiClick={handleEmoji} onEmojiDelete={handleEmojiDelete} onEmojiSend={handleSendTextMsg} />
-        </div>
-      )}
-
-      {/* 发送更多面板 */}
-      {sendMoreVisible && (
-        <div className="send-more-panel" onClick={(e) => e.stopPropagation()}>
-          <div className="send-more-panel-item-wrapper">
-            <div className="send-more-panel-item">
-              <input type="file" ref={imageInputRef} accept="image/*" className="file-input-overlay" onChange={onImageSelected} />
-              <Icon size={26} type="icon-tupian" onClick={handleSendImageMsg} />
-            </div>
-            <div className="icon-text">{t('albumText')}</div>
-          </div>
-          <div className="send-more-panel-item-wrapper">
-            <div className="send-more-panel-item">
-              <input type="file" ref={fileInputRef} className="file-input-overlay" onChange={onFileSelected} />
-              <Icon size={26} type="icon-tupian" onClick={handleSendFileMsg} />
-            </div>
-            <div className="icon-text">{t('fileText')}</div>
-          </div>
         </div>
       )}
 
@@ -935,6 +947,16 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
           <MentionChooseList teamId={to} onClose={handleCloseMention} onMemberClick={handleMentionSelect}></MentionChooseList>
         </BottomPopup>
       }
+
+      {/* 拍摄 ActionSheet：选择拍照还是摄像 */}
+      <ActionSheet
+        visible={cameraSheetVisible}
+        actions={[
+          { text: '拍照', onClick: () => { setCameraSheetVisible(false); handleCameraPhoto() } },
+          { text: '摄像', onClick: () => { setCameraSheetVisible(false); handleCameraVideo() } },
+        ]}
+        onClose={() => setCameraSheetVisible(false)}
+      />
     </div>
   )
 })

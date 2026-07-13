@@ -155,6 +155,11 @@ const P2pSetting: React.FC<P2pSettingProps> = observer(({ accountId: propAccount
 
         {/* 设置选项卡片 */}
         <div className="p2p-set-card">
+          <div className="p2p-set-item p2p-set-item-flex-sb" onClick={gotoPinList}>
+            <div>{t('pinText')}</div>
+            <Icon iconClassName="more-icon" style={{ color: '#999' }} type="icon-jiantou" />
+          </div>
+
           {/* 消息免打扰开关 */}
           <div className="p2p-set-item p2p-set-item-flex-sb">
             <div>{t('sessionMuteText')}</div>
@@ -165,11 +170,6 @@ const P2pSetting: React.FC<P2pSettingProps> = observer(({ accountId: propAccount
           <div className="p2p-set-item p2p-set-item-flex-sb">
             <div>{t('stickTopText')}</div>
             <Switch checked={isStickTop} onChange={changeStickTopInfo} />
-          </div>
-
-          <div className="p2p-set-item p2p-set-item-flex-sb" onClick={gotoPinList}>
-            <div>{t('pinText')}</div>
-            <Icon iconClassName="more-icon" style={{ color: '#999' }} type="icon-jiantou" />
           </div>
         </div>
       </div>

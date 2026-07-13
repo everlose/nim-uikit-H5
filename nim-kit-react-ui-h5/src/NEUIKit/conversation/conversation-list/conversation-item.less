@@ -2,6 +2,7 @@
   position: relative;
   transition: transform 0.3s;
   z-index: 9;
+  touch-action: pan-y;
 
   &.show-action-list {
     transform: translateX(-200px);
@@ -44,6 +45,7 @@
     padding: 10px 20px 10px 15px;
     height: 72px;
     box-sizing: border-box;
+    user-select: none;
   }
 
   .conversation-item-left {
@@ -88,7 +90,7 @@
     font-size: 12px;
     color: #ccc;
     text-align: right;
-    width: 90px;
+    width: 105px;
     flex-shrink: 0;
   }
 

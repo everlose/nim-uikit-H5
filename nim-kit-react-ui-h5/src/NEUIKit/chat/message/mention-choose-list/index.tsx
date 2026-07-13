@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useStateContext } from '../../../common/hooks/useStateContext'
-import { autorun } from 'mobx'
+import { autorun, untracked } from 'mobx'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
 import { AT_ALL_ACCOUNT, ALLOW_AT } from '../../../common/utils/constants'
 import { useTranslation } from '../../../common/hooks/useTranslate'
@@ -136,7 +136,17 @@ const MentionChooseList: React.FC<MentionChooseListProps> = ({
       if (teamId) {
         const members = store?.teamMemberStore.getTeamMember(teamId) as V2NIMTeamMember[] || []
         setTeamMembers(sortGroupMembers(members, teamId))
-        
+
+        // 预加载缺失的群成员用户资料，避免列表名称从 accid 闪现为昵称
+        untracked(() => {
+          const missingAccountIds = members
+            .map((m) => m.accountId)
+            .filter((id) => !store?.userStore.users.has(id))
+          if (missingAccountIds.length > 0) {
+            store?.userStore.getUserListFromCloudActive(missingAccountIds)
+          }
+        })
+
         const _team = store?.teamStore.teams.get(teamId)
         if (_team) {
           setTeam(_team)

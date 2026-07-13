@@ -5,10 +5,10 @@
       <div class="title">{{ title }}</div>
       <div class="slot-content"><slot></slot></div>
       <div class="buttons">
-        <div class="button cancel" @click="handleCancelClick">
+        <div v-if="cancelText" class="button cancel" @click="handleCancelClick">
           {{ cancelText }}
         </div>
-        <div class="button confirm" @click="handleConfirmClick">
+        <div class="button confirm" :class="{ 'full-width': !cancelText }" @click="handleConfirmClick">
           {{ confirmText }}
         </div>
       </div>

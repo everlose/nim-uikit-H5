@@ -59,11 +59,36 @@
   >
     <MessageFile :msg="msg" />
   </div>
+  <div
+    v-else-if="mergedForwardPayload"
+    class="pin-message-preview-merged-card"
+    @click="openMergedForward"
+  >
+    <div class="pin-merged-forward-title">
+      {{ mergedForwardTitle }}
+    </div>
+    <div class="pin-merged-forward-abstracts">
+      <div
+        v-for="(item, index) in mergedForwardPayload.data?.abstracts || []"
+        :key="index"
+      >
+        <span class="pin-merged-forward-sender">{{ item.senderNick }}: </span>
+        <span>{{ item.content }}</span>
+      </div>
+    </div>
+  </div>
   <div v-else class="pin-message-preview">[{{ t("unknowMsgText") }}]</div>
+  <MergedForwardModal
+    v-if="mergedVisible"
+    :visible="mergedVisible"
+    :title="mergedForwardTitle"
+    :msgs="mergedMsgs"
+    @close="mergedVisible = false"
+  />
 </template>
 
 <script lang="ts" setup>
-import { computed, ref } from "vue";
+import { computed, getCurrentInstance, ref } from "vue";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import MessageText from "./message/message-text.vue";
@@ -71,14 +96,55 @@ import MessageAudio from "./message/message-audio.vue";
 import MessageFile from "./message/message-file.vue";
 import PreviewImage from "../CommonComponents/PreviewImage.vue";
 import PreviewText from "../CommonComponents/PreviewText.vue";
+import MergedForwardModal from "./message/merged-forward/modal.vue";
 import { t } from "../utils/i18n";
+import { showToast } from "../utils/toast";
 import { getImageAttachmentSize, getImageRenderStyle, getImageThumbUrl } from "../utils/image";
+import { normalizeMergedForwardText, parseMergedForwardPayload } from "./message/merged-forward/utils";
 
 const props = defineProps<{
   msg: V2NIMMessageForUI;
 }>();
 
+const { proxy } = getCurrentInstance()!;
+const store = proxy?.$UIKitStore;
 const isPreviewVisible = ref(false);
+const mergedMsgs = ref<V2NIMMessageForUI[]>([]);
+const mergedVisible = ref(false);
+
+const mergedForwardPayload = computed(() => parseMergedForwardPayload(props.msg));
+
+const mergedForwardTitle = computed(() => {
+  const payload = mergedForwardPayload.value;
+  const sessionName = payload?.data?.sessionName || payload?.data?.sessionId || "";
+  return `${sessionName}${t("messageOfText")}`;
+});
+
+const openMergedForward = async () => {
+  if (mergedMsgs.value.length) {
+    mergedVisible.value = true;
+    return;
+  }
+  const data = mergedForwardPayload.value?.data;
+  try {
+    if (!data?.url) throw new Error("url missing");
+    const res = await fetch(data.url);
+    if (!res.ok) throw new Error("fetch failed");
+    const text = await res.text();
+    const list = store?.msgStore.deserializeMergeMsgs(
+      normalizeMergedForwardText(text)
+    ) as V2NIMMessageForUI[];
+    if (!list?.length) throw new Error("deserialize failed");
+    mergedMsgs.value = list;
+    mergedVisible.value = true;
+  } catch {
+    showToast({
+      message: t("getMergedForwardMsgFailedText"),
+      type: "error",
+      duration: 1000,
+    });
+  }
+};
 
 const imageUrl = computed(() => {
   if (props.msg.messageStatus?.errorCode === 102426) {
@@ -134,6 +200,44 @@ const handleVideoTouch = () => {
 .pin-message-preview {
   color: #666;
   line-height: 20px;
+}
+
+.pin-message-preview-merged-card {
+  padding: 12px 16px;
+  border: 1px solid #edf0f3;
+  border-radius: 8px;
+  cursor: pointer;
+  line-height: 18px;
+
+  &:active {
+    background-color: #f5f6f8;
+  }
+}
+
+.pin-merged-forward-title {
+  margin-bottom: 6px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #1f2329;
+}
+
+.pin-merged-forward-abstracts {
+  color: #656a72;
+  font-size: 13px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pin-merged-forward-sender {
+  display: inline-block;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  color: #3d4149;
 }
 
 .pin-message-image {

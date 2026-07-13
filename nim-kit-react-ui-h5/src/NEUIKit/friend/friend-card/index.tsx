@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useNavigate, useLocation } from '@/utils/router'
 import { observer } from 'mobx-react-lite'
 import NavBar from '@/NEUIKit/common/components/NavBar'
@@ -26,11 +26,16 @@ const FriendCard: React.FC = observer(() => {
   const query = new URLSearchParams(location.search)
   const account = query.get('accountId') || ''
 
+  // 强制拉取最新用户数据，防止缓存旧数据
+  useEffect(() => {
+    if (account) {
+      store.userStore.getUserListFromCloudActive([account])
+    }
+  }, [account])
+
   // 状态
   const userInfo = store.uiStore.getFriendWithUserNameCard(account)
   const { relation, isInBlacklist } = store.uiStore.getRelation(account)
-  const alias = store.friendStore.friends.get(account)?.alias || ''
-
   // 处理备注点击
   const handleAliasClick = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -92,12 +97,12 @@ const FriendCard: React.FC = observer(() => {
   const gotoChat = async () => {
     const conversationId = store.nim.V2NIMConversationIdUtil.p2pConversationId(userInfo?.accountId || '')
     await store.uiStore.selectConversation(conversationId)
-    navigate(neUiKitRouterPath.chat)
+    navigate(`${neUiKitRouterPath.chat}?conversationId=${conversationId}`)
   }
 
   return (
     <div className="nim-friend-card">
-      <NavBar title={t('FriendPageText')} />
+      <NavBar />
 
       <UserCard account={userInfo?.accountId} nick={userInfo?.name} />
 
@@ -116,42 +121,35 @@ const FriendCard: React.FC = observer(() => {
         </>
       ) : (
         <>
-          <div className="userInfo-item-wrapper">
+          <div className="userInfo-item-wrapper remark-wrapper">
+            <div className="item-divider" />
             <div className="userInfo-item" onClick={handleAliasClick}>
               <div className="item-left">{t('remarkText')}</div>
-              <div className="item-right">
-                <span className="item-right-alias">{alias}</span>
-                <span className="item-right">
-                  <Icon iconClassName="more-icon" style={{ color: '#999' }} type="icon-jiantou" />
-                </span>
-              </div>
+              <Icon iconClassName="more-icon" style={{ color: '#999' }} type="icon-jiantou" />
             </div>
+          </div>
 
-            <div className="userInfo-item">
-              <div className="item-left">{t('genderText')}</div>
-              <div className="item-right">{userInfo && userInfo.gender === 0 ? t('unknow') : userInfo && userInfo.gender === 1 ? t('man') : t('woman')}</div>
-            </div>
-
-            <div className="box-shadow"></div>
-
+          <div className="userInfo-item-wrapper">
             <div className="userInfo-item">
               <div className="item-left">{t('birthText')}</div>
               <div className="item-right">{(userInfo && userInfo.birthday) || t('unknow')}</div>
             </div>
 
-            <div className="box-shadow"></div>
+            <div className="item-divider" />
 
             <div className="userInfo-item">
               <div className="item-left">{t('mobile')}</div>
               <div className="item-right">{(userInfo && userInfo.mobile) || t('unknow')}</div>
             </div>
 
-            <div className="box-shadow"></div>
+            <div className="item-divider" />
 
             <div className="userInfo-item">
               <div className="item-left">{t('email')}</div>
               <div className="item-right">{(userInfo && userInfo.email) || t('unknow')}</div>
             </div>
+
+            <div className="item-divider" />
 
             <div className="userInfo-item">
               <div className="item-left">{t('sign')}</div>
@@ -170,8 +168,7 @@ const FriendCard: React.FC = observer(() => {
             {t('chatWithFriendText')}
           </div>
 
-          <div className="box-shadow"></div>
-
+          <div className="item-divider" />
           <div className="button button-red" onClick={deleteFriend}>
             {t('deleteFriendText')}
           </div>

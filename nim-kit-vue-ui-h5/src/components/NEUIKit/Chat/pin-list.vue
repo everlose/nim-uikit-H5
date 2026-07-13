@@ -47,45 +47,11 @@
         {{ t("viewMoreText") }}
       </div>
     </div>
-    <BottomPopup
+    <ActionSheet
       v-model="actionPopupVisible"
-      :showHeader="false"
-      :showCancel="false"
-      :showConfirm="false"
-      @cancel="closeActionPopup"
-      class="pin-list-action-popup"
-    >
-      <div v-if="actionMsg" class="pin-list-action-sheet">
-        <div class="pin-list-action-group">
-          <div class="pin-list-action" @click="handleUnpin(actionMsg)">
-            {{ t("unpinText") }}
-          </div>
-          <div
-            v-if="
-              actionMsg.messageType ===
-              V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT
-            "
-            class="pin-list-action"
-            @click="handleActionCopy(actionMsg)"
-          >
-            {{ t("copyText") }}
-          </div>
-          <div
-            v-if="
-              actionMsg.messageType !==
-              V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO
-            "
-            class="pin-list-action"
-            @click="handleActionForward(actionMsg)"
-          >
-            {{ t("forwardText") }}
-          </div>
-        </div>
-        <div class="pin-list-action-cancel" @click="closeActionPopup">
-          {{ t("cancelText") }}
-        </div>
-      </div>
-    </BottomPopup>
+      :actions="actionSheetActions"
+      @close="closeActionPopup"
+    />
     <MessageForward
       v-if="forwardMsgId"
       v-model="forwardVisible"
@@ -101,6 +67,7 @@
 import { computed, getCurrentInstance, onMounted, onUnmounted, ref } from "vue";
 import { autorun } from "mobx";
 import { useRouter } from "vue-router";
+import dayjs from "dayjs";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import type { PinInfo } from "@xkit-yx/im-store-v2/dist/types/src/pinMsgsMap";
@@ -108,7 +75,7 @@ import NavBar from "../CommonComponents/NavBar.vue";
 import Avatar from "../CommonComponents/Avatar.vue";
 import Empty from "../CommonComponents/Empty.vue";
 import Icon from "../CommonComponents/Icon.vue";
-import BottomPopup from "../CommonComponents/BottomPopup.vue";
+import ActionSheet from "../CommonComponents/ActionSheet.vue";
 import MessageForward from "./message/message-forward.vue";
 import PinListMessagePreview from "./pin-list-message-preview.vue";
 import { t } from "../utils/i18n";
@@ -130,6 +97,19 @@ const visibleCount = ref(PAGE_SIZE);
 const loading = ref(false);
 const actionMsg = ref<V2NIMMessageForUI>();
 const actionPopupVisible = ref(false);
+const actionSheetActions = computed(() => {
+  const msg = actionMsg.value;
+  if (!msg) return [];
+  return [
+    { text: t("unpinText"), onClick: () => handleUnpin(msg) },
+    ...(msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT
+      ? [{ text: t("copyText"), onClick: () => handleActionCopy(msg) }]
+      : []),
+    ...(msg.messageType !== V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO
+      ? [{ text: t("forwardText"), onClick: () => handleActionForward(msg) }]
+      : []),
+  ];
+});
 const forwardVisible = ref(false);
 const forwardMsgId = ref("");
 const forwardMsg = ref<V2NIMMessageForUI>();
@@ -147,12 +127,17 @@ const targetId = conversationId
   : "";
 
 const formatPinTime = (time: number) => {
-  const date = new Date(time);
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  const hour = `${date.getHours()}`.padStart(2, "0");
-  const minute = `${date.getMinutes()}`.padStart(2, "0");
-  return `${date.getFullYear()}-${month}-${day} ${hour}:${minute}`;
+  if (!time) return "";
+  const _d = dayjs(time);
+  const isCurrentDay = _d.isSame(dayjs(), "day");
+  const isCurrentYear = _d.isSame(dayjs(), "year");
+  if (isCurrentDay) {
+    return _d.format("HH:mm");
+  }
+  if (isCurrentYear) {
+    return _d.format(t("timeFormatSameYear"));
+  }
+  return _d.format(t("timeFormatDiffYear"));
 };
 
 const getPinMessage = (pinInfo?: PinInfo) => {
@@ -351,7 +336,6 @@ onUnmounted(() => {
   -webkit-overflow-scrolling: touch;
   background: #fff;
 }
-
 .pin-list-loading {
   padding: 24px 0;
   text-align: center;
@@ -363,7 +347,8 @@ onUnmounted(() => {
   padding: 14px 14px 20px;
 }
 
-.pin-list-wrapper :deep(.nav-bar-wrapper) {
+.pin-list-wrapper :deep(.nav-bar-container) {
+  background-color: #FFF;
   border-bottom: 1px solid #e6e6e6;
 }
 
@@ -426,55 +411,5 @@ onUnmounted(() => {
   text-align: center;
   color: #a6adb6;
   font-size: 14px;
-}
-
-.pin-list-action-popup :deep(.popup-content) {
-  left: 0;
-  right: 0;
-  background: transparent;
-  border-radius: 0;
-  padding: 0 12px calc(env(safe-area-inset-bottom) + 10px);
-  box-sizing: border-box;
-}
-
-.pin-list-action-popup :deep(.popup-body) {
-  padding: 0;
-  max-height: none;
-  overflow: visible;
-}
-
-.pin-list-action-sheet {
-  width: 100%;
-}
-
-.pin-list-action-group,
-.pin-list-action-cancel {
-  overflow: hidden;
-  border-radius: 12px;
-  background: #fff;
-}
-
-.pin-list-action,
-.pin-list-action-cancel {
-  width: 100%;
-  height: 56px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  padding: 0;
-  color: #222;
-  font-size: 16px;
-  line-height: 56px;
-  text-align: center;
-}
-
-.pin-list-action + .pin-list-action {
-  border-top: 1px solid #e6e6e6;
-}
-
-.pin-list-action-cancel {
-  margin-top: 8px;
-  background: #fff;
 }
 </style>

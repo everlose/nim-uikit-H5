@@ -4,9 +4,13 @@
   overflow: auto;
   background-color: #fff;
 
-  .create-team-content {
-    height: calc(100% - 60px);
-    margin-top: 48px;
+  // .create-team-content {
+  //   height: calc(100% - 60px);
+  // }
+
+  .nav-bar-container {
+    background-color: #FFF;
+    border-bottom: 1px solid #e6e6e6;
   }
 
   .create-team-button {
@@ -14,6 +18,17 @@
     font-size: 16px;
     cursor: pointer;
     user-select: none;
+
+    &.disabled {
+      color: #b3cff7;
+      cursor: not-allowed;
+    }
+  }
+
+  .nav-cancel-btn {
+    font-size: 16px;
+    color: #333;
+    cursor: pointer;
   }
 
   .select-wrapper {

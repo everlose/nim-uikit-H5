@@ -5,6 +5,7 @@ import Icon from '@/NEUIKit/common/components/Icon'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
 import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
 import type { V2NIMMessageFileAttachment } from 'nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService'
+import { downloadFile } from '@/NEUIKit/common/utils/file'
 import './index.less'
 
 interface MessageFileProps {
@@ -39,8 +40,6 @@ const MessageFile: React.FC<MessageFileProps> = observer(({ msg }) => {
   const prefixName = index > -1 ? name.slice(0, index) : name
   // const suffixName = name.slice(Math.max(index - 5, 0))
 
-  // 下载链接
-  const downloadUrl = url + ((url as string).includes('?') ? '&' : '?') + `download=${name}`
   const uploadProgress = Math.max(0, Math.min(100, Number((msg as V2NIMMessageForUI & { uploadProgress?: number }).uploadProgress || 0)))
   const isUploading = msg.sendingState === V2NIMConst.V2NIMMessageSendingState.V2NIM_MESSAGE_SENDING_STATE_SENDING && uploadProgress < 100
   const progressStyle = {
@@ -48,7 +47,7 @@ const MessageFile: React.FC<MessageFileProps> = observer(({ msg }) => {
   } as React.CSSProperties
 
   return (
-    <a className="msg-file-wrapper" target="_blank" rel="noopener noreferrer" href={downloadUrl} download={name}>
+    <div className="msg-file-wrapper" onClick={() => downloadFile(url, name)}>
       <div className={!msg.isSelf ? 'msg-file msg-file-in' : 'msg-file msg-file-out'}>
         <div className={`msg-file-icon-wrapper ${isUploading ? 'msg-file-icon-wrapper-uploading' : ''}`} style={progressStyle}>
           <Icon type={iconType} size={32} iconClassName="msg-file-icon" />
@@ -62,7 +61,7 @@ const MessageFile: React.FC<MessageFileProps> = observer(({ msg }) => {
           <div className="msg-file-size">{parseFileSize(size)}</div>
         </div>
       </div>
-    </a>
+    </div>
   )
 })
 

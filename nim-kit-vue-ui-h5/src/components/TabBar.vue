@@ -84,11 +84,10 @@ onMounted(() => {
 
 <style scoped>
 .tabbar {
-  flex: 0 0 60px;
-  height: 60px;
+  flex: 0 0 57px;
+  height: 57px;
   display: flex;
-  background-color: #fff;
-  border-top: 1px solid #eee;
+  background-color: #f7f7f7;
   z-index: 1;
 }
 
@@ -98,7 +97,7 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #666;
+  color: #999;
   text-decoration: none;
   -webkit-tap-highlight-color: transparent; /* 添加这行 */
 }
@@ -109,7 +108,7 @@ onMounted(() => {
 }
 
 .tab-item.router-link-active {
-  color: #409eff;
+  color: #337EFF;
 }
 
 .icon-wrapper {
@@ -124,7 +123,7 @@ onMounted(() => {
   right: -2px;
   width: 8px;
   height: 8px;
-  background-color: #ff4d4f;
+  background-color: #f24957;
   border-radius: 50%;
 }
 

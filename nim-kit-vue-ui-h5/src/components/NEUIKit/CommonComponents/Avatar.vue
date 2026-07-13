@@ -68,11 +68,11 @@ const appellation = computed(() => {
   return proxy?.$UIKitStore.uiStore
     .getAppellation({
       account: props.account,
-      teamId: props.teamId,
+      teamId: "",
       ignoreAlias: false,
       nickFromMsg: "",
     })
-    ?.slice(-2);
+    ?.slice(0, 2);
 });
 const uninstallUserInfoWatch = autorun(async () => {
   proxy?.$UIKitStore?.userStore?.getUserActive(props.account).then((data) => {
@@ -80,17 +80,35 @@ const uninstallUserInfoWatch = autorun(async () => {
   });
 });
 
+const avatarSizeNum = Number(avatarSize) || 42;
+const thumbSize = avatarSizeNum * 2;
+
 const avatarUrl = computed(() => {
   user.value = proxy?.$UIKitStore?.userStore?.users?.get(props.account);
-  return props.avatar || user.value?.avatar;
+  const url = props.avatar || user.value?.avatar;
+  if (url) {
+    return proxy?.$NIM?.cloudStorage?.getThumbUrl(url, {
+      width: thumbSize,
+      height: thumbSize,
+    }) || url;
+  }
+  return '';
 });
 
 const color = computed(() => {
   return getAvatarBackgroundColor(props.account);
 });
 
-const handleAvatarClick = () => {
+const handleAvatarClick = async () => {
   if (props.gotoUserCard && !isLongPress) {
+    // 仅在锚点模式下移除 URL 中的 anchorMessageClientId，防止返回后仍锚点到标记消息
+    const query = router.currentRoute.value.query;
+    if (query.anchorMessageClientId && query.conversationId) {
+      await router.replace({
+        path: neUiKitRouterPath.chat,
+        query: { conversationId: query.conversationId },
+      });
+    }
     if (props.account === proxy?.$UIKitStore?.userStore?.myUserInfo.accountId) {
       router.push(neUiKitRouterPath.myDetail);
     } else {

@@ -6,6 +6,7 @@ import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { toast } from '@/NEUIKit/common/utils/toast'
 import { loading } from '@/NEUIKit/common/utils/loading'
+import { useTeamNotification } from '@/NEUIKit/common/hooks/useTeamNotification'
 
 import NavBar from '@/NEUIKit/common/components/NavBar'
 import Icon from '@/NEUIKit/common/components/Icon'
@@ -29,6 +30,8 @@ const TeamAvatarEdit: React.FC = observer(() => {
   const [avatar, setAvatar] = useState<string>('')
   // 是否有编辑权限
   const [hasPermission, setHasPermission] = useState(false)
+
+  useTeamNotification(teamId)
 
   // 默认头像列表
   const avatarArr = [

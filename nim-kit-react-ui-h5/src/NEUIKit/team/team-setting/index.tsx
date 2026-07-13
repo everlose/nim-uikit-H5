@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { observer } from 'mobx-react-lite'
 import { useNavigate, useLocation } from '@/utils/router'
 import RootStore from '@xkit-yx/im-store-v2'
@@ -6,8 +6,9 @@ import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { toast } from '@/NEUIKit/common/utils/toast'
-import { modal } from '@/NEUIKit/common/utils/modal'
+import { modal, showModal } from '@/NEUIKit/common/utils/modal'
 import { neUiKitRouterPath } from '@/NEUIKit/common/utils/uikitRouter'
+import { useTeamNotification } from '@/NEUIKit/common/hooks/useTeamNotification'
 
 import NavBar from '@/NEUIKit/common/components/NavBar'
 import Avatar from '@/NEUIKit/common/components/Avatar'
@@ -35,6 +36,10 @@ const TeamSetting: React.FC = observer(() => {
     : store.localConversationStore?.conversations.get(conversationId)
   // 群信息
   const team = store.teamStore.teams.get(teamId)
+
+  // 监听群解散/被踢出事件
+  const isDismissingRef = useRef(false)
+  useTeamNotification(teamId, isDismissingRef)
 
   // 群消息免打扰模式
   const [teamMuteMode, setTeamMuteMode] = useState<V2NIMConst.V2NIMTeamMessageMuteMode>()
@@ -103,6 +108,7 @@ const TeamSetting: React.FC = observer(() => {
       title: t('dismissTeamText'),
       content: t('dismissTeamConfirmText'),
       onConfirm: () => {
+        isDismissingRef.current = true
         store.teamStore
           .dismissTeamActive(teamId)
           .then(() => {
@@ -214,7 +220,7 @@ const TeamSetting: React.FC = observer(() => {
     [teamId]
   )
 
-  // 初始化数据和自动更新
+  // 初始化数据
   useEffect(() => {
     // 查询当前群是否开启免打扰
     store.teamStore.getTeamMessageMuteModeActive(teamId, 1).then((res: V2NIMConst.V2NIMTeamMessageMuteMode) => {
@@ -265,20 +271,20 @@ const TeamSetting: React.FC = observer(() => {
             </div>
           </div>
           <div className="team-set-card">
-            <div className="team-set-item team-set-item-flex">
-              <div>{t('stickTopText')}</div>
-              <Switch checked={!!conversation?.stickTop} onChange={changeStickTopInfo} />
+            <div className="team-set-item team-set-item-flex" onClick={gotoPinList}>
+              <div>{t('pinText')}</div>
+              <Icon iconClassName="more-icon" style={{ color: '#999' }} type="icon-jiantou" />
             </div>
             <div className="team-set-item team-set-item-flex">
               <div>{t('sessionMuteText')}</div>
               <Switch checked={teamMuteMode !== V2NIMConst.V2NIMTeamMessageMuteMode.V2NIM_TEAM_MESSAGE_MUTE_MODE_ON} onChange={changeTeamMute} />
             </div>
+            <div className="team-set-item team-set-item-flex">
+              <div>{t('stickTopText')}</div>
+              <Switch checked={!!conversation?.stickTop} onChange={changeStickTopInfo} />
+            </div>
             <div className="team-set-item team-set-item-flex" onClick={goNickInTeam}>
               <div>{t('nickInTeam')}</div>
-              <Icon iconClassName="more-icon" style={{ color: '#999' }} type="icon-jiantou" />
-            </div>
-            <div className="team-set-item team-set-item-flex" onClick={gotoPinList}>
-              <div>{t('pinText')}</div>
               <Icon iconClassName="more-icon" style={{ color: '#999' }} type="icon-jiantou" />
             </div>
           </div>

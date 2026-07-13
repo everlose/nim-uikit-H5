@@ -56,10 +56,11 @@ const MergedForwardCard: React.FC<MergedForwardCardProps> = observer(({ msg }) =
           </div>
           <div className="merged-forward-abstracts">
             {(data?.abstracts || []).map((item, index) => (
-              <div key={index} className="merged-forward-abstract">
+              <span key={index}>
                 <span className="merged-forward-sender">{item.senderNick}: </span>
-                <span className="merged-forward-abstract-content">{item.content}</span>
-              </div>
+                <span>{item.content}</span>
+                {index < (data?.abstracts || []).length - 1 && <br />}
+              </span>
             ))}
           </div>
           <div className="merged-forward-footer">{t('chatHistoryText')}</div>

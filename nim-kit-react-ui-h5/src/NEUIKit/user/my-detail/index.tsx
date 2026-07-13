@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react'
+import React, { useRef } from 'react'
 import { useNavigate } from '@/utils/router'
 import { observer } from 'mobx-react-lite'
 import NavBar from '@/NEUIKit/common/components/NavBar'
@@ -21,6 +21,7 @@ const MyDetail: React.FC = observer(() => {
   const navigate = useNavigate()
   const { store } = useStateContext()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const dateInputRef = useRef<HTMLInputElement>(null)
 
   // 群组列表本地状态
   const myUserInfo = store.userStore.myUserInfo
@@ -93,9 +94,35 @@ const MyDetail: React.FC = observer(() => {
     }
   }
 
+  // 生日选择处理
+  const handleBirthdayChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const birthday = e.target.value
+    console.log('[birthday] handleBirthdayChange, value:', birthday)
+    if (!birthday || !myUserInfo) return
+    try {
+      await store.userStore.updateSelfUserProfileActive({ ...myUserInfo, birthday })
+    } catch {
+      toast.info(`${t('saveText')}${t('failText')}`)
+    }
+  }
+
+  // 触发生日日期选择器
+  const triggerDatePicker = () => {
+    console.log('[birthday] triggerDatePicker called, dateInputRef:', dateInputRef.current)
+    if (dateInputRef.current) {
+      // iOS Safari 需要 focus 后 showPicker
+      dateInputRef.current.focus()
+      try {
+        // @ts-ignore - showPicker 是较新的 API
+        dateInputRef.current.showPicker?.()
+      } catch {}
+      dateInputRef.current.click()
+    }
+  }
+
   return (
     <div className="my-detail-wrapper">
-      <NavBar title={t('PersonalPageText')} />
+      <NavBar title={t('PersonalPageText')} backgroundColor="transparent" />
 
       <div className="my-detail-item-wrapper">
         {/* 头像 */}
@@ -135,21 +162,31 @@ const MyDetail: React.FC = observer(() => {
         <div className="box-shadow"></div>
 
         {/* 性别 */}
-        <div className="my-detail-item">
+        <div className="my-detail-item" onClick={() => navigate(`${neUiKitRouterPath.myDetailGenderEdit}`)}>
           <div className="item-left">{t('genderText')}</div>
           <div className="item-right">
             <div className="uni-input">{getGenderText()}</div>
+            <Icon iconClassName="arrow" type="icon-jiantou" size={15} style={{ color: '#A6ADB6' }} />
           </div>
         </div>
 
         <div className="box-shadow"></div>
 
         {/* 生日 */}
-        <div className="my-detail-item">
+        <div className="my-detail-item birthday-row" onClick={triggerDatePicker}>
           <div className="item-left">{t('birthText')}</div>
           <div className="item-right">
             <div className="uni-input">{myUserInfo?.birthday || t('unknow')}</div>
+            <Icon iconClassName="arrow" type="icon-jiantou" size={15} style={{ color: '#A6ADB6' }} />
           </div>
+          <input
+            type="date"
+            ref={dateInputRef}
+            className="hidden-date-input"
+            onChange={handleBirthdayChange}
+            onClick={(e) => console.log('[birthday] input onClick', e)}
+            onFocus={() => console.log('[birthday] input onFocus')}
+          />
         </div>
 
         <div className="box-shadow"></div>
@@ -158,7 +195,7 @@ const MyDetail: React.FC = observer(() => {
         <div className="my-detail-item" onClick={() => navigatorToUserItem('mobile')}>
           <div className="item-left">{t('mobile')}</div>
           <div className="item-right">
-            {myUserInfo?.mobile || t('unknow')}
+            {myUserInfo?.mobile || ''}
             <Icon iconClassName="arrow" type="icon-jiantou" size={15} style={{ color: '#A6ADB6' }} />
           </div>
         </div>
@@ -169,7 +206,7 @@ const MyDetail: React.FC = observer(() => {
         <div className="my-detail-item" onClick={() => navigatorToUserItem('email')}>
           <div className="item-left">{t('email')}</div>
           <div className="item-right">
-            <div className="email">{myUserInfo?.email || t('unknow')}</div>
+            <div className="email">{myUserInfo?.email || ''}</div>
             <Icon iconClassName="arrow" type="icon-jiantou" size={15} style={{ color: '#A6ADB6' }} />
           </div>
         </div>
@@ -178,9 +215,10 @@ const MyDetail: React.FC = observer(() => {
       {/* 签名 */}
       <div className="my-detail-signature" onClick={() => navigatorToUserItem('sign')}>
         <div className="signature-key">{t('sign')}</div>
-        <div className="signature-text">{myUserInfo?.sign || t('unknow')}</div>
+        <div className="signature-text">{myUserInfo?.sign || ''}</div>
         <Icon iconClassName="arrow" type="icon-jiantou" size={15} style={{ color: '#A6ADB6' }} />
       </div>
+
     </div>
   )
 })

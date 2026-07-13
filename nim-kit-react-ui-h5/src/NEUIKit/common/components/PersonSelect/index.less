@@ -81,49 +81,28 @@
   .nim-checkbox-custom {
     width: 18px;
     height: 18px;
-    border: 2px solid #dcdfe6;
+    border: 1px solid #969AA0;
     border-radius: 50%;
     position: relative;
     transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 
-  .nim-checkbox-custom {
-    border-radius: 2px;
+  .nim-checkbox-custom.checked {
+    background: #337EFF;
+    border-color: #337EFF;
   }
 
-  .nim-radio-input:checked + .nim-radio-custom::after {
-    content: '';
-    position: absolute;
-    width: 10px;
-    height: 10px;
-    background: #337eff;
-    border-radius: 50%;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-  }
-
-  .nim-checkbox-input:checked + .nim-checkbox-custom {
-    background: #337eff;
-    border-color: #337eff;
-  }
-
-  .nim-checkbox-input:checked + .nim-checkbox-custom::after {
-    content: '';
-    position: absolute;
-    width: 4px;
-    height: 8px;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) rotate(45deg) translate(0, -2px);
-  }
-
-  .nim-radio-input:disabled + .nim-radio-custom,
-  .nim-checkbox-input:disabled + .nim-checkbox-custom {
+  .nim-checkbox-custom.disabled {
     background-color: #f5f7fa;
     border-color: #e4e7ed;
+    cursor: not-allowed;
+  }
+
+  .nim-checkbox-label.disabled {
     cursor: not-allowed;
   }
 }

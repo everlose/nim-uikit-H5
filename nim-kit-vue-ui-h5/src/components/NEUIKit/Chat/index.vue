@@ -22,6 +22,11 @@
     <div class="msg-alert">
       <NetworkAlert />
     </div>
+    <div class="security-tip">
+      <svg class="security-tip-icon" width="14" height="14" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M10.5 0C4.706 0 0 4.706 0 10.5S4.706 21 10.5 21 21 16.294 21 10.5 16.294 0 10.5 0zm.75 15h-1.5v1.5h1.5V15zm-1.5-2V4.5h1.5V13h-1.5z" fill="#FC596A"/>
+      </svg>{{ t("securityTipText") }}<span class="security-tip-report" @click="handleReportClick">{{ t("reportText") }}</span>
+    </div>
     <MessageList
       :conversationType="conversationType"
       :to="to"
@@ -142,11 +147,10 @@ import {
 import { createChatMessageLoader } from "./message-pin/messageLoader";
 import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import {
-  chunkMessages,
   getMessageSelectKey,
   isForwardableMessage,
   isSelectableMessage,
-  MULTI_DELETE_BATCH_SIZE,
+  MULTI_DELETE_LIMIT,
   MULTI_FORWARD_LIMIT,
   syncConversationLastMessageAfterDelete,
 } from "./message/message-multi-select/utils";
@@ -310,7 +314,8 @@ const handleHistoryMsgReceipt = (msgs: V2NIMMessage[]) => {
       .filter((item: V2NIMMessage) => item.senderId !== myUserAccountId);
 
     if (othersMsgs.length > 0) {
-      store?.msgStore.sendMsgReceiptActive(othersMsgs?.[0]);
+      const latestMsg = othersMsgs.reduce((max, msg) => (msg.createTime > max.createTime ? msg : max), othersMsgs[0]);
+      store?.msgStore.sendMsgReceiptActive(latestMsg);
     }
   } else if (
     conversationType ===
@@ -328,6 +333,8 @@ const handleHistoryMsgReceipt = (msgs: V2NIMMessage[]) => {
 
     store?.msgStore.getTeamMsgReadsActive(myMsgs, conversationId);
 
+    // 发送群消息已读回执
+    // sdk 要求一次最多传入 50 个消息对象
     const othersMsgs = msgs
       .filter(
         (item: V2NIMMessage) =>
@@ -336,8 +343,8 @@ const handleHistoryMsgReceipt = (msgs: V2NIMMessage[]) => {
       )
       .filter((item: V2NIMMessage) => item.senderId !== myUserAccountId);
 
-    if (othersMsgs.length > 0 && othersMsgs.length < 50) {
-      store?.msgStore.sendTeamMsgReceiptActive(othersMsgs);
+    if (othersMsgs.length > 0) {
+      store?.msgStore.sendTeamMsgReceiptActive(othersMsgs.slice(-50));
     }
   }
 };
@@ -365,12 +372,27 @@ const {
   loadingNewer,
   hasOlder,
   hasNewer,
+  hasLoadedLatest,
   anchorMode,
   showLatestHint,
   loadOlder,
   loadNewer,
   switchToLatest,
 } = loader;
+
+/** 进入聊天页面时，首次加载完成后自动滚动到底部 */
+const initialScrollKey = ref("");
+watch(
+  [() => conversationId, () => anchorMessageClientId, anchorMode, hasLoadedLatest, () => msgs.value.length],
+  () => {
+    const key = `${conversationId}-${anchorMessageClientId}`;
+    if (anchorMode.value || anchorMessageClientId || !hasLoadedLatest.value || !msgs.value.length || initialScrollKey.value === key) return;
+    initialScrollKey.value = key;
+    setTimeout(() => {
+      emitter.emit(events.ON_SCROLL_BOTTOM);
+    }, 0);
+  }
+);
 
 const selectedMessages = computed(() => {
   return selectedMessageIds.value
@@ -490,6 +512,11 @@ const handleMultiDelete = () => {
     return;
   }
 
+  if (selectedMessages.value.length > MULTI_DELETE_LIMIT) {
+    showToast({ message: t("multiDeleteLimitText"), type: "error" });
+    return;
+  }
+
   if (
     store?.connectStore.loginStatus !==
     V2NIMConst.V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINED
@@ -505,13 +532,7 @@ const handleMultiDelete = () => {
     cancelText: t("cancelText"),
     onConfirm: async () => {
       try {
-        const messageBatches = chunkMessages(
-          selectedMessages.value,
-          MULTI_DELETE_BATCH_SIZE
-        );
-        for (const messageBatch of messageBatches) {
-          await store?.msgStore.deleteMsgActive(messageBatch);
-        }
+        await store?.msgStore.deleteMsgActive(selectedMessages.value)
         showToast({ message: t("deleteMsgSuccessText"), type: "info" });
         syncConversationLastMessageAfterDelete(store, conversationId);
         exitMultiSelect();
@@ -529,7 +550,7 @@ const backToConversation = () => {
 };
 
 const backToLatestMsgs = async () => {
-  await router.replace(neUiKitRouterPath.chat);
+  await router.replace(`${neUiKitRouterPath.chat}?conversationId=${conversationId}`);
   await switchToLatest();
   setTimeout(() => {
     emitter.emit(events.ON_SCROLL_BOTTOM);
@@ -549,9 +570,7 @@ const onTeamDismissed = (data: any) => {
     showModal({
       content: t("onDismissTeamText"),
       title: t("tipText"),
-      onCancel: () => {
-        backToConversation();
-      },
+      cancelText: "",
       onConfirm: () => {
         backToConversation();
       },
@@ -560,7 +579,15 @@ const onTeamDismissed = (data: any) => {
 };
 
 // 跳转设置页
-const handleSetting = () => {
+const handleSetting = async () => {
+  store?.uiStore.unselectConversation?.();
+  // 仅在锚点模式下移除 URL 中的 anchorMessageClientId，防止从设置页返回后仍锚点到标记消息
+  if (anchorMessageClientId) {
+    await router.replace({
+      path: neUiKitRouterPath.chat,
+      query: { conversationId },
+    });
+  }
   if (
     conversationType ===
     V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P
@@ -584,14 +611,23 @@ const handleSetting = () => {
   }
 };
 
+/** 举报点击 */
+const handleReportClick = () => {
+  window.open("https://yunxin.163.com/survey/report", "_blank");
+};
+
 /** 自己主动离开群组或被管理员踢出回调 */
-const onTeamLeft = () => {
-  showToast({
-    message: t("onRemoveTeamText"),
-    type: "info",
-    duration: 1000,
-  });
-  backToConversation();
+const onTeamLeft = (data: any) => {
+  if (data.teamId === to) {
+    showModal({
+      content: t("onTeamKickedText"),
+      title: t("tipText"),
+      cancelText: "",
+      onConfirm: () => {
+        backToConversation();
+      },
+    });
+  }
 };
 
 /** 收到新消息 */
@@ -607,9 +643,12 @@ const onReceiveMessages = (newMsgs: V2NIMMessage[]) => {
   }
 
   if (loader.handleIncomingMessages(newMsgs as V2NIMMessageForUI[])) {
-    setTimeout(() => {
-      emitter.emit(events.ON_SCROLL_BOTTOM);
-    }, 0);
+    // 双 rAF 确保 Vue 重渲染 + 浏览器 layout 完成后再滚动
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        emitter.emit(events.ON_SCROLL_BOTTOM);
+      })
+    })
   }
 };
 
@@ -634,8 +673,7 @@ const conversationTypeWatch = autorun(() => {
     V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM
   ) {
     const team = store?.teamStore.teams.get(to);
-    const memberCount = `(${team?.memberCount || 0})`;
-    title.value = (team?.name || "") + memberCount;
+    title.value = team?.name || "";
     subTitle.value = "";
   }
 });
@@ -649,39 +687,17 @@ const processReplyMsgs = (messages: V2NIMMessageForUI[]) => {
     if (msg.serverExtension) {
       try {
         const { yxReplyMsg } = JSON.parse(msg.serverExtension);
-        if (!yxReplyMsg) {
-          return;
-        }
-
-        const replyMsg = messages.find(
-          (item) => item.messageClientId === yxReplyMsg.idClient
-        );
-        if (replyMsg) {
-          _replyMsgsMap[msg.messageClientId] = replyMsg;
-        } else {
-          _replyMsgsMap[msg.messageClientId] = {
-            messageClientId: "noFind",
-          };
-          const {
-            scene,
-            from,
-            to,
-            idServer,
-            messageClientId,
-            time,
-            receiverId,
-          } = yxReplyMsg;
-
-          if (
-            scene &&
-            from &&
-            to &&
-            idServer &&
-            messageClientId &&
-            time &&
-            receiverId
-          ) {
-            reqMsgs.push({
+        if (yxReplyMsg) {
+          const replyMsg = messages.find(
+            (item) => item.messageClientId === yxReplyMsg.idClient
+          );
+          if (replyMsg) {
+            _replyMsgsMap[msg.messageClientId] = replyMsg;
+          } else {
+            _replyMsgsMap[msg.messageClientId] = {
+              messageClientId: "noFind",
+            };
+            const {
               scene,
               from,
               to,
@@ -689,12 +705,33 @@ const processReplyMsgs = (messages: V2NIMMessageForUI[]) => {
               messageClientId,
               time,
               receiverId,
-            });
-            messageClientIds[idServer] = msg.messageClientId;
+            } = yxReplyMsg;
+
+            if (
+              scene &&
+              from &&
+              to &&
+              idServer &&
+              messageClientId &&
+              time &&
+              receiverId
+            ) {
+              reqMsgs.push({
+                scene,
+                from,
+                to,
+                idServer,
+                messageClientId,
+                time,
+                receiverId,
+              });
+              messageClientIds[idServer] = msg.messageClientId;
+            }
           }
         }
       } catch {}
-    } else if (msg.threadReply) {
+    }
+    if (msg.threadReply) {
       const yxReplyMsg = msg.threadReply;
       const replyMsg = messages.find(
         (item) => item.messageClientId === yxReplyMsg.messageClientId
@@ -809,8 +846,7 @@ const setNavTitle = () => {
     V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM
   ) {
     const team = store?.teamStore.teams.get(to);
-    const subTitle = `(${team?.memberCount || 0})`;
-    title.value = (team?.name || "") + subTitle;
+    title.value = team?.name || "";
   }
 };
 
@@ -828,6 +864,9 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  // 离开聊天页时清除选中会话，确保新消息能显示未读
+  store?.uiStore.unselectConversation?.();
+
   nim.V2NIMTeamService.off("onTeamDismissed", onTeamDismissed);
   nim.V2NIMTeamService.off("onTeamLeft", onTeamLeft);
   nim.V2NIMMessageService.off("onReceiveMessages", onReceiveMessages as any);
@@ -852,11 +891,37 @@ onUnmounted(() => {
 }
 
 .msg-alert {
-  display: flex;
-  flex-direction: column;
+  position: relative;
+  height: 0;         /* 始终不占 flex 空间，避免 NetworkAlert 出现时消息跳动 */
   width: 100%;
-  height: auto;
-  z-index: 1;
+  z-index: 10;
+}
+
+.msg-alert > div {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.security-tip {
+  padding: 6px 16px;
+  background: #fff5e1;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 13px;
+  line-height: 150%;
+  color: #eb9718;
+}
+
+.security-tip-icon {
+  vertical-align: text-top;
+  margin-right: 4px;
+}
+
+.security-tip-report {
+  color: #3370ff;
+  cursor: pointer;
 }
 
 .msg-wrapper {
@@ -887,7 +952,7 @@ onUnmounted(() => {
 .msg-anchor-latest {
   position: absolute;
   right: 18px;
-  bottom: 82px;
+  bottom: 110px;
   width: 38px;
   height: 38px;
   border-radius: 50%;
@@ -897,7 +962,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   transform: rotate(90deg);
-  z-index: 10;
+  z-index: 1;
 }
 
 .msg-anchor-loading {

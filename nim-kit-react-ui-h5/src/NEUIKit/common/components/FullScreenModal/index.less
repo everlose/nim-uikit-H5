@@ -1,6 +1,9 @@
 .nim-full-screen-modal {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 10000;
   display: flex;
   flex-direction: column;
@@ -20,8 +23,8 @@
   color: #1f2329;
 }
 
-.nim-full-screen-modal-back {
-  width: 40px;
+.nim-full-screen-modal-back,
+.nim-full-screen-modal-left {
   height: 40px;
   padding: 0;
   border: 0;
@@ -30,6 +33,16 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
+}
+
+.nim-full-screen-modal-back {
+  width: 40px;
+}
+
+.nim-full-screen-modal-left {
+  min-width: 40px;
+  font-size: 14px;
+  white-space: nowrap;
 }
 
 .nim-full-screen-modal-title {
@@ -47,7 +60,7 @@
 }
 
 .nim-full-screen-modal-right {
-  width: 40px;
+  min-width: 40px;
   min-height: 40px;
   display: flex;
   align-items: center;

@@ -21,7 +21,7 @@ import { useEventTracking } from '../common/hooks/useEventTracking'
 import { checkUserOnline } from '../common/utils/userStatus'
 import { getVoiceTextMap, setVoiceText as setCachedVoiceText } from './voiceTextCache'
 import { useChatMessageLoader } from './hooks/useChatMessageLoader'
-import { chunkMessages, getMessageSelectKey, isForwardableMessage, isSelectableMessage, MULTI_DELETE_BATCH_SIZE, MULTI_FORWARD_LIMIT, syncConversationLastMessageAfterDelete } from './message/message-multi-select/utils'
+import { getMessageSelectKey, isForwardableMessage, isSelectableMessage, MULTI_DELETE_LIMIT, MULTI_FORWARD_LIMIT, syncConversationLastMessageAfterDelete } from './message/message-multi-select/utils'
 import { isMergeForwardableMessage, MERGED_FORWARD_LIMIT } from './message/merged-forward/utils'
 import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
 
@@ -103,6 +103,20 @@ const Chat = observer(() => {
     }
   }, [queryConversationId])
 
+  // 离开聊天页时清除选中会话，确保新消息能显示未读
+  // 注意：不用 useEffect cleanup，因为 React 18 StrictMode 在开发环境会模拟卸载/重新挂载，
+  // 导致 cleanup 在进入聊天页时就被调用，误清除刚选中的会话。
+  // 改为在每一个导航出口显式调用 unselectConversation + popstate 监听手势返回。
+  useEffect(() => {
+    const handlePopState = () => {
+      store.uiStore.unselectConversation()
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [])
+
   /**
    * 返回会话列表
    */
@@ -116,6 +130,12 @@ const Chat = observer(() => {
    * 跳转设置页
    */
   const handleSetting = () => {
+    store.uiStore.unselectConversation()
+    // 仅在锚点模式下移除 URL 中的 anchorMessageClientId，防止从设置页返回后仍锚点到标记消息
+    const hashQuery = window.location.hash.split('?')[1] || ''
+    if (new URLSearchParams(hashQuery).get('anchorMessageClientId')) {
+      window.history.replaceState(window.history.state, '', `#${neUiKitRouterPath.chat}?conversationId=${conversationId}`)
+    }
     if (conversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P) {
       navigate({
         pathname: neUiKitRouterPath.p2pSetting,
@@ -133,6 +153,21 @@ const Chat = observer(() => {
     setIsMultiSelecting(false)
     setSelectedMessageIds([])
     setMultiForwardMsgs([])
+  }
+
+  const handleReportClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    window.open('https://yunxin.163.com/survey/report', '_blank')
+  }
+
+  const renderSecurityTip = () => {
+    return (
+      <div className="security-tip">
+        <svg className="security-tip-icon" width="14" height="14" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path fillRule="evenodd" clipRule="evenodd" d="M10.5 0C4.706 0 0 4.706 0 10.5S4.706 21 10.5 21 21 16.294 21 10.5 16.294 0 10.5 0zm.75 15h-1.5v1.5h1.5V15zm-1.5-2V4.5h1.5V13h-1.5z" fill="#FC596A"/>
+        </svg>{t('securityTipText')}<span className="security-tip-report" onClick={handleReportClick}>{t('reportText')}</span>
+      </div>
+    )
   }
 
   const enterMultiSelect = (msg: V2NIMMessageForUI) => {
@@ -258,11 +293,9 @@ const Chat = observer(() => {
   const onTeamDismissed = (data: any) => {
     if (data.teamId === to) {
       showModal({
-        content: t('onDismissTeamText'),
         title: t('tipText'),
-        onCancel: () => {
-          backToConversation()
-        },
+        content: t('onDismissTeamText'),
+        cancelText: '',
         onConfirm: () => {
           backToConversation()
         }
@@ -271,15 +304,17 @@ const Chat = observer(() => {
   }
 
   /**
-   * 自己主动离开群组或被管理员踢出回调
+   * 被管理员移出群聊回调
    */
   const onTeamLeft = () => {
-    showToast({
-      message: t('onRemoveTeamText'),
-      type: 'info',
-      duration: 1000
+    showModal({
+      title: t('tipText'),
+      content: t('onTeamKickedText'),
+      cancelText: '',
+      onConfirm: () => {
+        backToConversation()
+      }
     })
-    backToConversation()
   }
 
   /**
@@ -287,15 +322,16 @@ const Chat = observer(() => {
    */
   const onReceiveMessages = (messages: any[]) => {
     // 当前在聊天页，视为消息已读，发送已读回执
-    const pathname = window.location.pathname
-    if (messages.length && !messages[0]?.isSelf && messages[0].conversationId === conversationId && pathname === neUiKitRouterPath.chat) {
+    if (messages.length && !messages[0]?.isSelf && messages[0].conversationId === conversationId && location.pathname === neUiKitRouterPath.chat) {
       handleMsgReceipt(messages)
     }
     if (handleIncomingMessages(messages)) {
-      // 加个宏任务, 因为事件先触发后, msgs 自身才更新
-      setTimeout(() => {
-        emitter.emit(events.ON_SCROLL_BOTTOM)
-      }, 0)
+      // 双 rAF 确保 React 重渲染 + 浏览器 layout 完成后再滚动
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          emitter.emit(events.ON_SCROLL_BOTTOM)
+        })
+      })
     }
   }
 
@@ -321,9 +357,10 @@ const Chat = observer(() => {
         .filter((item) => !['beReCallMsg', 'reCallMsg'].includes(item.recallType || ''))
         .filter((item) => item.senderId !== myUserAccountId)
 
-      // 发送单聊消息已读回执
+      // 发送单聊消息已读回执，取当前页 createTime 最大的对方消息
       if (othersMsgs.length > 0) {
-        await store.msgStore.sendMsgReceiptActive(othersMsgs[0])
+        const latestMsg = othersMsgs.reduce((max, msg) => (msg.createTime > max.createTime ? msg : max), othersMsgs[0])
+        await store.msgStore.sendMsgReceiptActive(latestMsg)
       }
     }
     // 如果是群聊
@@ -336,13 +373,13 @@ const Chat = observer(() => {
       await store.msgStore.getTeamMsgReadsActive(myMsgs, conversationId)
 
       // 发送群消息已读回执
-      // sdk 要求 一次最多传入 50 个消息对象
+      // sdk 要求一次最多传入 50 个消息对象
       const othersMsgs = messages
         .filter((item) => !['beReCallMsg', 'reCallMsg'].includes(item.recallType || ''))
         .filter((item) => item.senderId !== myUserAccountId)
 
-      if (othersMsgs.length > 0 && othersMsgs.length < 50) {
-        await store.msgStore.sendTeamMsgReceiptActive(othersMsgs)
+      if (othersMsgs.length > 0) {
+        await store.msgStore.sendTeamMsgReceiptActive(othersMsgs.slice(-50))
       }
     }
   }
@@ -355,6 +392,7 @@ const Chat = observer(() => {
     hasNewer,
     anchorMode,
     showLatestHint,
+    hasLoadedLatest,
     loadOlder,
     loadNewer,
     switchToLatest,
@@ -384,6 +422,11 @@ const Chat = observer(() => {
       return
     }
 
+    if (selectedMessages.length > MULTI_DELETE_LIMIT) {
+      showToast({ message: t('multiDeleteLimitText'), type: 'error' })
+      return
+    }
+
     if (store.connectStore.loginStatus !== V2NIMConst.V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINED) {
       toast.info(t('networkError'))
       return
@@ -396,10 +439,7 @@ const Chat = observer(() => {
       cancelText: t('cancelText'),
       onConfirm: async () => {
         try {
-          const messageBatches = chunkMessages(selectedMessages, MULTI_DELETE_BATCH_SIZE)
-          for (const messageBatch of messageBatches) {
-            await store.msgStore.deleteMsgActive(messageBatch)
-          }
+          await store.msgStore.deleteMsgActive(selectedMessages)
           toast.info(t('deleteMsgSuccessText'))
           syncConversationLastMessageAfterDelete(store, conversationId)
           exitMultiSelect()
@@ -411,7 +451,7 @@ const Chat = observer(() => {
   }
 
   const backToLatestMsgs = async () => {
-    navigate(neUiKitRouterPath.chat, { replace: true })
+    navigate(`${neUiKitRouterPath.chat}?conversationId=${conversationId}`, { replace: true })
     await switchToLatest()
     setTimeout(() => {
       emitter.emit(events.ON_SCROLL_BOTTOM)
@@ -449,9 +489,8 @@ const Chat = observer(() => {
       } else if (conversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM) {
         // autorun 会自动追踪 teams.get(to) 的变化
         const team = store.teamStore.teams.get(to)
-        const subTitle = `(${team?.memberCount || 0})`
-        // 群聊：标题包含群名和成员数，无状态文字
-        setTitle((team?.name || '') + subTitle)
+        // 群聊：标题为群名，无状态文字
+        setTitle(team?.name || '')
         setStatusText('')
       }
     })
@@ -461,13 +500,13 @@ const Chat = observer(() => {
 
   useEffect(() => {
     const key = `${conversationId}-${anchorMessageClientId}`
-    if (anchorMode || anchorMessageClientId || !msgs.length || initialScrollKeyRef.current === key) return
+    if (anchorMode || anchorMessageClientId || !hasLoadedLatest || !msgs.length || initialScrollKeyRef.current === key) return
 
     initialScrollKeyRef.current = key
     setTimeout(() => {
       emitter.emit(events.ON_SCROLL_BOTTOM)
     }, 0)
-  }, [anchorMessageClientId, anchorMode, conversationId, msgs.length])
+  }, [anchorMessageClientId, anchorMode, conversationId, hasLoadedLatest, msgs.length])
 
   // 处理可能的回复消息
   const processReplyMsg = (msgs: any) => {
@@ -512,7 +551,7 @@ const Chat = observer(() => {
         }
       }
       // 新版本采用 threadReply 存储被回复消息的相关消息
-      else if (msg.threadReply) {
+      if (msg.threadReply) {
         // serverExtension":"{\"yxReplyMsg\":{\"idClient\":\"0cb875a967854da69173df397294a832\",\"scene\":2,\"from\":\"334574329307264\",\"receiverId\":\"46223315430\",\"to\":\"334633283559552|2|46223315430\",\"idServer\":\"3101994188820971548\",\"time\":1755500811326}}","sendingState":3,"senderName":""}
         // yxReplyMsg 存储着被回复消息的相关消息
         const yxReplyMsg = msg.threadReply
@@ -632,6 +671,8 @@ const Chat = observer(() => {
       <div className="msg-alert">
         <NetworkAlert />
       </div>
+
+      {renderSecurityTip()}
 
       <MessageList
         conversationType={conversationType}

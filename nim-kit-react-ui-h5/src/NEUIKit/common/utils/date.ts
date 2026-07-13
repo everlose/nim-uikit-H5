@@ -1,44 +1,20 @@
+import dayjs from 'dayjs'
 import { t } from './i18n'
 
 export function caculateTimeago(dateTimeStamp: number): string {
-  const minute = 1000 * 60 // 把分，时，天，周，半个月，一个月用毫秒表示
-  const hour = minute * 60
-  const day = hour * 24
-  const week = day * 7
-  const now = new Date().getTime() // 获取当前时间毫秒
-  const diffValue = now - dateTimeStamp // 时间差
-  let result = ''
+  const now = new Date()
+  const msgDate = new Date(dateTimeStamp)
 
-  if (diffValue < 0) {
-    return t('nowText')
+  // 不同年：YY年MM月DD日 HH:mm
+  if (msgDate.getFullYear() !== now.getFullYear()) {
+    return dayjs(dateTimeStamp).format(t('timeFormatDiffYear'))
   }
-  const minC = Math.floor(diffValue / minute) // 计算时间差的分，时，天，周，月
-  const hourC = Math.floor(diffValue / hour)
-  const dayC = Math.floor(diffValue / day)
-  const weekC = Math.floor(diffValue / week)
-  if (weekC >= 1 && weekC <= 4) {
-    result = ` ${weekC}${t('weekText')}`
-  } else if (dayC >= 1 && dayC <= 6) {
-    result = ` ${dayC}${t('dayText')}`
-  } else if (hourC >= 1 && hourC <= 23) {
-    result = ` ${hourC}${t('hourText')}`
-  } else if (minC >= 1 && minC <= 59) {
-    result = ` ${minC}${t('minuteText')}`
-  } else if (diffValue >= 0 && diffValue <= minute) {
-    result = t('nowText')
-  } else {
-    const datetime = new Date()
-    datetime.setTime(dateTimeStamp)
-    const Nyear = datetime.getFullYear()
-    const Nmonth =
-      datetime.getMonth() + 1 < 10
-        ? `0${datetime.getMonth() + 1}`
-        : datetime.getMonth() + 1
-    const Ndate =
-      datetime.getDate() < 10 ? `0${datetime.getDate()}` : datetime.getDate()
-    result = `${Nyear}-${Nmonth}-${Ndate}`
+  // 不同月或不同日：MM月DD日 HH:mm
+  if (msgDate.getMonth() !== now.getMonth() || msgDate.getDate() !== now.getDate()) {
+    return dayjs(dateTimeStamp).format(t('timeFormatSameYear'))
   }
-  return result
+  // 同一天：HH:mm
+  return dayjs(dateTimeStamp).format('HH:mm')
 }
 
 export const formatDateRange = (type: string) => {

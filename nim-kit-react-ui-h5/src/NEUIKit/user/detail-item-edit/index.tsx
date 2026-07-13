@@ -100,6 +100,7 @@ const DetailItemEdit: React.FC = observer(() => {
     <div className="nim-detail-item-edit">
       <NavBar
         title={t(key)}
+        backgroundColor="transparent"
         rightContent={
           <div className="nav-bar-text" onClick={onUserInfoConfirm}>
             {t('okText')}

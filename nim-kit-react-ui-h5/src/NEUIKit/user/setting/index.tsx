@@ -51,11 +51,15 @@ const Setting: React.FC = observer(() => {
       title: t('tipText'),
       content: t('logoutConfirmText'),
       onCancel: () => {},
-      onConfirm: () => {
+      onConfirm: async () => {
         // 清除本地存储
         localStorage.removeItem('__yx_im_options__h5')
-        // 销毁store
-        store.destroy()
+        // 登出 NIM
+        if (store.nim) {
+          await store.nim.V2NIMLoginService.logout()
+        }
+        // 清空 store 缓存的会话、好友、群等数据，避免换号登录后残留旧数据
+        store.resetState()
         // 跳转到登录页
         navigate(neUiKitRouterPath.login)
       }
@@ -66,7 +70,7 @@ const Setting: React.FC = observer(() => {
 
   return (
     <div className="setting-wrapper">
-      <NavBar title={t('setText')} />
+      <NavBar title={t('setText')} backgroundColor="transparent" />
 
       <div className="setting-item-wrapper">
         {/* 云端会话开关 */}
@@ -76,9 +80,6 @@ const Setting: React.FC = observer(() => {
             <Switch checked={enableV2CloudConversation} onChange={handleCloudConversationChange} />
           </div>
         </div>
-
-        {/* 分隔线 */}
-        <div className="box-shadow"></div>
 
         {/* 语言切换开关 */}
         <div className="setting-item">

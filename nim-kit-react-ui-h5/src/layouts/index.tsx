@@ -246,7 +246,7 @@ const Layout: React.FC = () => {
         locale={language}
         // @ts-expect-error
         nim={nimInstance}
-        singleton={true}
+        singleton={false}
       >
         <div className="main-content">
           <PageTransition pathname={location.pathname}>

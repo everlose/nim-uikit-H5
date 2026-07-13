@@ -4,11 +4,10 @@ import { useNavigate, useLocation } from '@/utils/router'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { toast } from '@/NEUIKit/common/utils/toast'
-import type { V2NIMTeamMember } from 'nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService'
+import { useTeamNotification } from '@/NEUIKit/common/hooks/useTeamNotification'
 
 import NavBar from '@/NEUIKit/common/components/NavBar'
 import Icon from '@/NEUIKit/common/components/Icon'
-import Input from '@/NEUIKit/common/components/Input'
 
 import './team-nick-edit.less'
 
@@ -23,15 +22,11 @@ const TeamNickEdit: React.FC = observer(() => {
 
   // 输入内容
   const [inputValue, setInputValue] = useState('')
-  // 是否显示清除图标
-  const [showClearIcon, setShowClearIcon] = useState(false)
   const params = new URLSearchParams(location.search)
   const id = params.get('teamId') || ''
-  // 群ID
-  const [teamId, setTeamId] = useState(id)
+  useTeamNotification(id)
   // 我的成员信息
-  // const [myMemberInfo, setMyMemberInfo] = useState<V2NIMTeamMember>()
-  const myMemberInfo = store.teamMemberStore.getTeamMember(id, [store.userStore.myUserInfo.accountId])[0]
+  const myMemberInfo = store.teamMemberStore.getTeamMember(id, [store.userStore.myUserInfo.accountId])?.[0]
 
   // 输入变化
   const onInputChange = useCallback((value: string) => {
@@ -39,9 +34,7 @@ const TeamNickEdit: React.FC = observer(() => {
   }, [])
 
   // 输入框获取焦点
-  const onInputFocus = useCallback(() => {
-    setShowClearIcon(true)
-  }, [])
+  const onInputFocus = useCallback(() => {}, [])
 
   // 清除输入内容
   const clearInputValue = useCallback(() => {
@@ -57,7 +50,7 @@ const TeamNickEdit: React.FC = observer(() => {
   const onOk = useCallback(() => {
     store.teamMemberStore
       .updateMyMemberInfoActive({
-        teamId,
+        teamId: id,
         memberInfo: {
           teamNick: inputValue.trim()
         }
@@ -68,11 +61,11 @@ const TeamNickEdit: React.FC = observer(() => {
       .catch(() => {
         toast.info(t('saveFailedText'))
       })
-  }, [teamId, inputValue])
+  }, [id, inputValue])
 
   // 初始化数据和自动更新
   useEffect(() => {
-    setInputValue(myMemberInfo.teamNick || '')
+    setInputValue(myMemberInfo?.teamNick || '')
   }, [myMemberInfo])
 
   return (
@@ -87,16 +80,20 @@ const TeamNickEdit: React.FC = observer(() => {
         rightContent={<div onClick={onOk}>{t('okText')}</div>}
       />
       <div className="userInfo-item-wrapper">
-        <Input
-          className="input"
-          // confirmType={t('okText')}
+        <textarea
+          className="nick-textarea"
           onFocus={onInputFocus}
-          maxLength={15}
-          onChange={onInputChange}
+          maxLength={30}
+          onChange={(e) => onInputChange(e.target.value)}
           value={inputValue}
           placeholder={t('nickInTeam')}
+          rows={3}
         />
-        <div onClick={clearInputValue}>{showClearIcon && <Icon iconClassName="clear-icon" type="icon-shandiao" />}</div>
+        {inputValue && (
+          <div onClick={clearInputValue} className="clear-icon-wrapper">
+            <Icon iconClassName="clear-icon" type="icon-shandiao" />
+          </div>
+        )}
       </div>
     </div>
   )

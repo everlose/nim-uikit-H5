@@ -1,22 +1,33 @@
 <template>
-  <div v-if="visible" class="fullscreen-modal">
+  <Teleport to="body">
+    <div v-if="visible" class="fullscreen-modal">
     <div class="fullscreen-modal-header">
-      <button class="fullscreen-modal-back" type="button" @click="emit('back')">
-        <Icon type="icon-zuojiantou" :size="24" />
-      </button>
+      <div class="fullscreen-modal-left">
+        <slot name="left">
+          <button class="fullscreen-modal-back" type="button" @click="emit('back')">
+            <Icon type="icon-zuojiantou" :size="24" />
+          </button>
+        </slot>
+      </div>
       <div class="fullscreen-modal-title">{{ title }}</div>
-      <div class="fullscreen-modal-spacer"></div>
+      <div class="fullscreen-modal-right">
+        <slot name="right"></slot>
+      </div>
     </div>
     <div class="fullscreen-modal-body">
       <slot></slot>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <script lang="ts" setup>
+import { watch } from "vue";
 import Icon from "./Icon.vue";
+import emitter from "../utils/eventBus";
+import { events } from "../utils/constants";
 
-defineProps<{
+const props = defineProps<{
   visible: boolean;
   title: string;
 }>();
@@ -24,12 +35,22 @@ defineProps<{
 const emit = defineEmits<{
   (e: "back"): void;
 }>();
+
+// 打开全屏页面时停止语音播放
+watch(() => props.visible, (newVal) => {
+  if (newVal) {
+    emitter.emit(events.AUDIO_STOP_ALL);
+  }
+});
 </script>
 
 <style scoped>
 .fullscreen-modal {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 10000;
   display: flex;
   flex-direction: column;
@@ -49,8 +70,13 @@ const emit = defineEmits<{
   background: #fff;
 }
 
-.fullscreen-modal-back,
-.fullscreen-modal-spacer {
+.fullscreen-modal-left {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.fullscreen-modal-back {
   width: 40px;
   min-height: 40px;
   border: 0;
@@ -58,13 +84,17 @@ const emit = defineEmits<{
   background: transparent;
   display: flex;
   align-items: center;
-}
-
-.fullscreen-modal-back {
   justify-content: flex-start;
 }
 
-.fullscreen-modal-spacer {
+.fullscreen-modal-right {
+  min-width: 40px;
+  min-height: 40px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
 }
 

@@ -36,20 +36,47 @@
           v-for="item in personList"
           :key="item.accountId"
         >
-          <!-- 修改多选模式部分 -->
-          <label class="checkbox-label" @click.prevent="handleCheckboxChange($event, item.accountId)">
-            <input
-              type="checkbox"
-              class="checkbox-input"
-              :value="item.accountId"
-              :checked="selectAccount.includes(item.accountId)"
-              :disabled="
+          <label
+            class="checkbox-label"
+            :class="{
+              disabled:
                 item.disabled ||
                 (selectAccount.length >= max &&
-                  !selectAccount.includes(item.accountId))
-              "
-            />
-            <span class="checkbox-custom"></span>
+                  !selectAccount.includes(item.accountId)),
+            }"
+            @click.prevent="
+              item.disabled ? null :
+              (selectAccount.length >= max &&
+                !selectAccount.includes(item.accountId)) ? $emit('maxExceeded') :
+              handleCheckboxChange($event, item.accountId)
+            "
+          >
+            <span
+              class="checkbox-custom"
+              :class="{
+                checked: selectAccount.includes(item.accountId),
+                disabled:
+                  item.disabled ||
+                  (selectAccount.length >= max &&
+                    !selectAccount.includes(item.accountId)),
+              }"
+            >
+              <svg
+                v-if="selectAccount.includes(item.accountId)"
+                viewBox="0 0 18 18"
+                width="18"
+                height="18"
+                fill="none"
+              >
+                <path
+                  d="M5.15 8.74L8 12.5L14.24 7.18"
+                  stroke="#fff"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
             <Avatar class="user-avatar" size="36" :account="item.accountId" />
             <div class="user-name">
               <Appellation :account="item.accountId" :teamId="item.teamId" />
@@ -103,6 +130,7 @@ onMounted(() => {
 const $emit = defineEmits<{
   (event: "checkboxChange", selectList: string | string[]): void;
   (event: "onBtnClick"): void;
+  (event: "maxExceeded"): void;
 }>();
 
 const onBtnClick = () => {
@@ -202,49 +230,28 @@ const handleCheckboxChange = (event: Event, accountId: string) => {
 .checkbox-custom {
   width: 18px;
   height: 18px;
-  border: 2px solid #dcdfe6;
+  border: 1px solid #969aa0;
   border-radius: 50%;
   position: relative;
   transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.checkbox-custom {
-  border-radius: 2px;
-}
-
-.radio-input:checked + .radio-custom::after {
-  content: "";
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  background: #337eff;
-  border-radius: 50%;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.checkbox-input:checked + .checkbox-custom {
+.checkbox-custom.checked {
   background: #337eff;
   border-color: #337eff;
 }
 
-.checkbox-input:checked + .checkbox-custom::after {
-  content: "";
-  position: absolute;
-  width: 4px;
-  height: 8px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(45deg) translate(0, -2px);
-}
-
-.radio-input:disabled + .radio-custom,
-.checkbox-input:disabled + .checkbox-custom {
+.checkbox-custom.disabled {
   background-color: #f5f7fa;
   border-color: #e4e7ed;
+  cursor: not-allowed;
+}
+
+.checkbox-label.disabled {
   cursor: not-allowed;
 }
 </style>

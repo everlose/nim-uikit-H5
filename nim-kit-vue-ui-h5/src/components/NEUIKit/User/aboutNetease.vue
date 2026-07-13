@@ -1,6 +1,6 @@
 <template>
   <div class="wrapper">
-    <NavBar title="关于" />
+    <NavBar :title="t('commsEaseText')" />
     <div class="logo-box">
       <img
         src="https://yx-web-nosdn.netease.im/common/fcd2d5e8d2897d4b2d965e06509f47d2/about-logo.png"

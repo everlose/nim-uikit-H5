@@ -9,7 +9,7 @@ import NavBar from '@/NEUIKit/common/components/NavBar'
 import Avatar from '@/NEUIKit/common/components/Avatar'
 import Empty from '@/NEUIKit/common/components/Empty'
 import Icon from '@/NEUIKit/common/components/Icon'
-import BottomPopup from '@/NEUIKit/common/components/BottomPopup'
+import ActionSheet from '@/NEUIKit/common/components/ActionSheet'
 import MessageForward from '@/NEUIKit/chat/message/message-forward'
 import PinMessagePreview from '@/NEUIKit/chat/pin-list/message-preview'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
@@ -18,17 +18,23 @@ import { copyText } from '@/NEUIKit/common/utils'
 import { toast } from '@/NEUIKit/common/utils/toast'
 import { neUiKitRouterPath } from '@/NEUIKit/common/utils/uikitRouter'
 import { getMessageRefer } from '@/NEUIKit/chat/message-pin/utils'
+import dayjs from 'dayjs'
 import './index.less'
 
 const PAGE_SIZE = 20
 
-const formatPinTime = (time: number) => {
-  const date = new Date(time)
-  const month = `${date.getMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getDate()}`.padStart(2, '0')
-  const hour = `${date.getHours()}`.padStart(2, '0')
-  const minute = `${date.getMinutes()}`.padStart(2, '0')
-  return `${date.getFullYear()}-${month}-${day} ${hour}:${minute}`
+const formatPinTime = (time: number, t: (...args: any[]) => string) => {
+  if (!time) return ''
+  const _d = dayjs(time)
+  const isCurrentDay = _d.isSame(dayjs(), 'day')
+  const isCurrentYear = _d.isSame(dayjs(), 'year')
+  if (isCurrentDay) {
+    return _d.format('HH:mm')
+  }
+  if (isCurrentYear) {
+    return _d.format(t('timeFormatSameYear'))
+  }
+  return _d.format(t('timeFormatDiffYear'))
 }
 
 const getPinMessage = (pinInfo: PinInfo): V2NIMMessageForUI | undefined => {
@@ -197,7 +203,7 @@ const PinList: React.FC = observer(() => {
                   <Avatar account={msg.senderId} teamId={targetId} size={40} />
                   <div className="pin-list-item-main">
                     <div className="pin-list-item-name">{senderName}</div>
-                    <div className="pin-list-item-time">{formatPinTime(msg.createTime)}</div>
+                    <div className="pin-list-item-time">{formatPinTime(msg.createTime, t)}</div>
                   </div>
                   <div className="pin-list-more" onClick={(e) => { e.stopPropagation(); setActionMsgId(msg.messageClientId) }}>
                     <Icon type="icon-More" size={22} />
@@ -216,30 +222,15 @@ const PinList: React.FC = observer(() => {
           )}
         </div>
       )}
-      <BottomPopup visible={!!actionMsg} showHeader={false} showCancel={false} showConfirm={false} onCancel={closeActionPopup} onClose={closeActionPopup} className="pin-list-action-popup">
-        {actionMsg && (
-          <div className="pin-list-action-sheet">
-            <div className="pin-list-action-group">
-              <div className="pin-list-action" onClick={() => handleUnpin(actionMsg)}>
-                {t('unpinText')}
-              </div>
-              {actionMsg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT && (
-                <div className="pin-list-action" onClick={() => handleActionCopy(actionMsg)}>
-                  {t('copyText')}
-                </div>
-              )}
-              {actionMsg.messageType !== V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO && (
-                <div className="pin-list-action" onClick={() => handleActionForward(actionMsg)}>
-                  {t('forwardText')}
-                </div>
-              )}
-            </div>
-            <div className="pin-list-action-cancel" onClick={closeActionPopup}>
-              {t('cancelText')}
-            </div>
-          </div>
-        )}
-      </BottomPopup>
+      <ActionSheet
+        visible={!!actionMsg}
+        actions={actionMsg ? [
+          { text: t('unpinText'), onClick: () => handleUnpin(actionMsg) },
+          ...(actionMsg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT ? [{ text: t('copyText'), onClick: () => handleActionCopy(actionMsg) }] : []),
+          ...(actionMsg.messageType !== V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO ? [{ text: t('forwardText'), onClick: () => handleActionForward(actionMsg) }] : []),
+        ] : []}
+        onClose={closeActionPopup}
+      />
       {forwardMsgId && (
         <MessageForward
           visible={!!forwardMsgId}

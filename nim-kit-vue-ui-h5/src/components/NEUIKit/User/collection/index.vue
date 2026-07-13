@@ -1,6 +1,6 @@
 <template>
   <div class="collection-wrapper">
-    <NavBar :title="t('collectionText')" />
+    <NavBar :title="t('collectionText')" backgroundColor="transparent" />
     <div v-if="loading" class="collection-loading">
       {{ t("loadingMoreText") }}
     </div>
@@ -90,6 +90,23 @@
           >
             <MessageFile :msg="item.msg" />
           </div>
+          <div
+            v-else-if="isMergedForward(item.msg)"
+            class="collection-merged-card"
+          >
+            <div class="collection-merged-title">
+              {{ getMergedForwardTitle(item.msg) }}
+            </div>
+            <div class="collection-merged-abstracts">
+              <div
+                v-for="(abstract, idx) in getMergedForwardAbstracts(item.msg)"
+                :key="idx"
+              >
+                <span class="collection-merged-sender">{{ abstract.senderNick }}: </span>
+                <span>{{ abstract.content }}</span>
+              </div>
+            </div>
+          </div>
           <div v-else class="collection-message-preview">
             {{ getMessagePreview(item.msg) }}
           </div>
@@ -106,37 +123,11 @@
       </div>
     </div>
 
-    <BottomPopup
+    <ActionSheet
       v-model="actionPopupVisible"
-      :showHeader="false"
-      :showCancel="false"
-      :showConfirm="false"
-      @cancel="closeActionPopup"
-    >
-      <div v-if="actionItem" class="collection-action-sheet">
-        <div class="collection-action-group">
-          <div class="collection-action" @click="handleDelete(actionItem)">
-            {{ t("deleteText") }}
-          </div>
-          <div
-            v-if="
-              actionItem.msg.messageType ===
-              V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT
-            "
-            class="collection-action"
-            @click="handleCopy(actionItem.msg)"
-          >
-            {{ t("copyText") }}
-          </div>
-          <div class="collection-action" @click="handleForward(actionItem.msg)">
-            {{ t("forwardText") }}
-          </div>
-        </div>
-        <div class="collection-action-cancel" @click="closeActionPopup">
-          {{ t("cancelText") }}
-        </div>
-      </div>
-    </BottomPopup>
+      :actions="actionSheetActions"
+      @close="closeActionPopup"
+    />
 
     <MessageForward
       v-if="forwardMsg"
@@ -163,12 +154,17 @@
         V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_VIDEO
       "
       class="collection-preview-mask"
-      @click="closePreview"
     >
-      <div class="collection-video-preview" @click.stop>
+      <div class="collection-video-preview">
         <video :src="getAttachmentUrl(previewMsg)" controls autoplay />
-        <div class="collection-preview-close" @click="closePreview">×</div>
       </div>
+      <button class="collection-preview-close" @click="closePreview" type="button" aria-label="关闭">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+          <circle cx="14" cy="14" r="14" fill="#4C4C4C"/>
+          <line x1="9" y1="9" x2="18.5" y2="18.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+          <line x1="19" y1="9" x2="9.5" y2="18.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
 
     <PreviewText
@@ -179,6 +175,14 @@
       :visible="true"
       :msg="previewMsg"
       :onClose="closePreview"
+    />
+
+    <MergedForwardModal
+      v-if="mergedVisible"
+      :visible="mergedVisible"
+      :title="mergedForwardTitle"
+      :msgs="mergedMsgs"
+      @close="mergedVisible = false"
     />
   </div>
 </template>
@@ -192,17 +196,19 @@ import type {
   V2NIMMessageFileAttachment,
 } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
 import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
+import dayjs from "dayjs";
 import NavBar from "../../CommonComponents/NavBar.vue";
 import Avatar from "../../CommonComponents/Avatar.vue";
 import Empty from "../../CommonComponents/Empty.vue";
 import Icon from "../../CommonComponents/Icon.vue";
-import BottomPopup from "../../CommonComponents/BottomPopup.vue";
+import ActionSheet from "../../CommonComponents/ActionSheet.vue";
 import PreviewImage from "../../CommonComponents/PreviewImage.vue";
 import PreviewText from "../../CommonComponents/PreviewText.vue";
 import MessageForward from "../../Chat/message/message-forward.vue";
 import MessageText from "../../Chat/message/message-text.vue";
 import MessageAudio from "../../Chat/message/message-audio.vue";
 import MessageFile from "../../Chat/message/message-file.vue";
+import MergedForwardModal from "../../Chat/message/merged-forward/modal.vue";
 import { t } from "../../utils/i18n";
 import { copyText } from "../../utils";
 import { showModal } from "../../utils/modal";
@@ -210,11 +216,11 @@ import { showToast } from "../../utils/toast";
 import { getMsgContentTipByType } from "../../utils/msg";
 import {
   getMessageCollectionConverter,
-  MESSAGE_COLLECTION_TYPE,
   MessageCollectionItem,
   normalizeMessageCollections,
 } from "../../utils/collection";
 import { getImageAttachmentSize, getImageRenderStyle, getImageThumbUrl } from "../../utils/image";
+import { normalizeMergedForwardText, parseMergedForwardPayload } from "../../Chat/message/merged-forward/utils";
 
 const PAGE_SIZE = 20;
 
@@ -231,6 +237,9 @@ const actionCollectionId = ref("");
 const forwardVisible = ref(false);
 const forwardMsg = ref<V2NIMMessageForUI>();
 const previewMsg = ref<V2NIMMessageForUI>();
+const mergedMsgs = ref<V2NIMMessageForUI[]>([]);
+const mergedVisible = ref(false);
+const mergedForwardTitle = ref("");
 const converter = computed(() => getMessageCollectionConverter(nim));
 
 const actionItem = computed(() =>
@@ -246,22 +255,32 @@ const actionPopupVisible = computed({
     }
   },
 });
+const actionSheetActions = computed(() => {
+  const item = actionItem.value;
+  if (!item) return [];
+  const canForward = item.msg.messageType !== V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO
+    && item.msg.messageType !== V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CALL;
+  return [
+    { text: t("deleteText"), onClick: () => handleDelete(item) },
+    ...(item.msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT
+      ? [{ text: t("copyText"), onClick: () => handleCopy(item.msg) }]
+      : []),
+    ...(canForward ? [{ text: t("forwardText"), onClick: () => handleForward(item.msg) }] : []),
+  ];
+});
 
 const formatCollectionTime = (time: number) => {
-  const date = new Date(time);
-  const now = new Date();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  const hour = `${date.getHours()}`.padStart(2, "0");
-  const minute = `${date.getMinutes()}`.padStart(2, "0");
-  if (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  ) {
-    return `${hour}:${minute}`;
+  if (!time) return "";
+  const _d = dayjs(time);
+  const isCurrentDay = _d.isSame(dayjs(), "day");
+  const isCurrentYear = _d.isSame(dayjs(), "year");
+  if (isCurrentDay) {
+    return _d.format("HH:mm");
   }
-  return `${date.getFullYear()}-${month}-${day} ${hour}:${minute}`;
+  if (isCurrentYear) {
+    return _d.format(t("timeFormatSameYear"));
+  }
+  return _d.format(t("timeFormatDiffYear"));
 };
 
 const getAttachmentUrl = (msg?: V2NIMMessageForUI) => {
@@ -348,6 +367,21 @@ const getMessagePreview = (msg: V2NIMMessageForUI) => {
   return getMsgContentTipByType(msg);
 };
 
+const isMergedForward = (msg: V2NIMMessageForUI) => {
+  return !!parseMergedForwardPayload(msg);
+};
+
+const getMergedForwardTitle = (msg: V2NIMMessageForUI) => {
+  const payload = parseMergedForwardPayload(msg);
+  const sessionName = payload?.data?.sessionName || payload?.data?.sessionId || "";
+  return `${sessionName}${t("messageOfText")}`;
+};
+
+const getMergedForwardAbstracts = (msg: V2NIMMessageForUI) => {
+  const payload = parseMergedForwardPayload(msg);
+  return payload?.data?.abstracts || [];
+};
+
 const loadCollections = async (isLoadMore = false) => {
   if (isLoadMore && (!hasMore.value || loadingMore.value)) {
     return;
@@ -366,7 +400,7 @@ const loadCollections = async (isLoadMore = false) => {
 
   try {
     const option: V2NIMCollectionOption = {
-      collectionType: MESSAGE_COLLECTION_TYPE,
+      collectionType: 0,
       limit: PAGE_SIZE,
       direction: V2NIMConst.V2NIMQueryDirection.V2NIM_QUERY_DIRECTION_DESC,
     };
@@ -481,7 +515,41 @@ const closeForward = () => {
   forwardMsg.value = undefined;
 };
 
+const openMergedForward = async (msg: V2NIMMessageForUI) => {
+  const payload = parseMergedForwardPayload(msg);
+  if (!payload?.data) return;
+  const data = payload.data;
+  const sessionName = data.sessionName || data.sessionId || "";
+  const title = `${sessionName}${t("messageOfText")}`;
+
+  if (mergedMsgs.value.length) {
+    mergedForwardTitle.value = title;
+    mergedVisible.value = true;
+    return;
+  }
+  try {
+    if (!data.url) throw new Error("url missing");
+    const res = await fetch(data.url);
+    if (!res.ok) throw new Error("fetch failed");
+    const text = await res.text();
+    const list = store?.msgStore.deserializeMergeMsgs(
+      normalizeMergedForwardText(text)
+    ) as V2NIMMessageForUI[];
+    if (!list?.length) throw new Error("deserialize failed");
+    mergedMsgs.value = list;
+    mergedForwardTitle.value = title;
+    mergedVisible.value = true;
+  } catch {
+    showToast({ message: t("getMergedForwardMsgFailedText"), type: "error" });
+  }
+};
+
 const handleItemClick = (msg: V2NIMMessageForUI) => {
+  if (parseMergedForwardPayload(msg)) {
+    openMergedForward(msg);
+    return;
+  }
+
   if (
     msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT ||
     msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_IMAGE ||
@@ -511,7 +579,7 @@ onMounted(() => {
 <style scoped>
 .collection-wrapper {
   min-height: 100vh;
-  background: #f5f6f8;
+  background: #E9EFF5;
 }
 
 .collection-loading {
@@ -524,16 +592,17 @@ onMounted(() => {
 .collection-list {
   height: calc(100vh - 50px);
   overflow-y: auto;
-  padding: 10px 12px 20px;
+  padding: 10px 16px 16px;
   box-sizing: border-box;
 }
 
 .collection-list-item {
   display: flex;
   flex-direction: column;
-  padding: 12px 12px 10px;
+  padding: 16px;
   background: #fff;
   border-radius: 8px;
+  border: 1px solid #DEE0E2;
 }
 
 .collection-list-item + .collection-list-item {
@@ -574,7 +643,7 @@ onMounted(() => {
 .collection-list-item-content {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #eef0f3;
+  border-top: 1px solid #E4E9F2;
 }
 
 .collection-list-item-time {
@@ -595,6 +664,39 @@ onMounted(() => {
   text-overflow: ellipsis;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
+}
+
+.collection-merged-card {
+  padding: 12px 16px;
+  border: 1px solid #edf0f3;
+  border-radius: 8px;
+  line-height: 18px;
+}
+
+.collection-merged-title {
+  margin-bottom: 6px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #1f2329;
+}
+
+.collection-merged-abstracts {
+  color: #656a72;
+  font-size: 13px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.collection-merged-sender {
+  display: inline-block;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  color: #3d4149;
 }
 
 .collection-message-preview-text :deep(.msg-text) {
@@ -636,7 +738,8 @@ onMounted(() => {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.2);
+  border: 2px solid #fff;
   border-radius: 50%;
   z-index: 1;
 }
@@ -699,41 +802,20 @@ onMounted(() => {
   font-size: 14px;
 }
 
-.collection-action-sheet {
-  background: #eff1f4;
-  margin: -16px;
-}
-
-.collection-action-group {
-  background: #fff;
-}
-
-.collection-action,
-.collection-action-cancel {
-  height: 48px;
-  line-height: 48px;
-  text-align: center;
-  color: #333;
-  font-size: 16px;
-  border-bottom: 1px solid #f1f2f5;
-}
-
-.collection-action-cancel {
-  margin-top: 8px;
-  background: #fff;
-}
-
 .collection-preview-mask {
   position: fixed;
   z-index: 9999;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   box-sizing: border-box;
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.9);
+  background: #000;
 }
 
 .collection-video-preview {
@@ -752,17 +834,16 @@ onMounted(() => {
 .collection-preview-close {
   position: fixed;
   top: 20px;
-  right: 0;
-  width: 30px;
-  height: 30px;
+  right: 20px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  font-size: 24px;
-  cursor: pointer;
-  background-color: rgba(0, 0, 0, 0.3);
-  border-radius: 50%;
-  z-index: 999;
 }
 </style>

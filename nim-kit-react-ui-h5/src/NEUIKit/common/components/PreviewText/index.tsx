@@ -25,9 +25,9 @@ const PreviewText: React.FC<PreviewTextProps> = ({ visible, msg, onClose }) => {
   if (!visible || !msg) return null
 
   return (
-    <div className="collection-preview-mask collection-text-preview-mask" onClick={onClose}>
-      <div className="collection-text-preview" onClick={(e) => e.stopPropagation()}>
-        <div className="collection-text-preview-content">
+    <div className="text-preview-mask" onClick={onClose}>
+      <div className="text-preview-body" onClick={(e) => e.stopPropagation()}>
+        <div className="text-preview-content">
           <MessageText msg={msg} />
         </div>
       </div>

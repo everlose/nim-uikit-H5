@@ -60,5 +60,8 @@ const textArr = parseText(
   word-break: break-all;
   word-wrap: break-word;
   white-space: break-spaces;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 </style>

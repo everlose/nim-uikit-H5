@@ -18,7 +18,9 @@
   >
     <div v-if="!props.readonly && props.isMultiSelecting && selectable" class="msg-select-column">
       <div class="msg-select-box" :class="{ selected: props.selected }">
-        <span v-if="props.selected" class="msg-select-check">✓</span>
+        <svg v-if="props.selected" class="msg-select-check" viewBox="0 0 18 18" width="18" height="18" fill="none">
+          <path d="M5.15 8.74L8 12.5L14.24 7.18" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
       </div>
     </div>
     <!-- 消息时间间隔提示 -->
@@ -111,14 +113,16 @@
         @onLongpress="handleAvatarLongpress"
       />
       <div class="msg-content">
-        <div class="msg-name" v-if="!props.msg.isSelf">
+        <div class="msg-name" v-if="props.readonly || (!props.msg.isSelf && isTeamChat)">
           {{ appellation }}
         </div>
-        <div :class="props.msg.isSelf ? 'self-msg-recall' : 'msg-recall'">
-          <text class="msg-recall2">
-            {{ !props.msg.isSelf ? t("recall2") : `${t("you") + t("recall")}` }}
-          </text>
-        </div>
+         <MessageBubble :msg="props.msg" :bg-visible="true"
+          :is-multi-selecting="props.isMultiSelecting"
+          :on-multi-select="props.onMultiSelect"
+          :readonly="props.readonly"
+        >
+        <span class="recall-text">{{ !props.msg.isSelf ? t("recall2") : `${t("you") + t("recall")}` }}</span>
+      </MessageBubble>
       </div>
     </div>
     <!-- 文本消息 -->
@@ -137,7 +141,7 @@
         @onLongpress="handleAvatarLongpress"
       />
       <div class="msg-content">
-        <div class="msg-name" v-if="!props.msg.isSelf">
+        <div class="msg-name" v-if="props.readonly || (!props.msg.isSelf && isTeamChat)">
           {{ appellation }}
         </div>
          <MessageBubble
@@ -168,7 +172,7 @@
         @onLongpress="handleAvatarLongpress"
       />
       <div class="msg-content">
-        <div class="msg-name" v-if="!props.msg.isSelf">
+        <div class="msg-name" v-if="props.readonly || (!props.msg.isSelf && isTeamChat)">
           {{ appellation }}
         </div>
         <MessageBubble
@@ -200,7 +204,7 @@
         @onLongpress="handleAvatarLongpress"
       />
       <div class="msg-content">
-        <div class="msg-name" v-if="!props.msg.isSelf">
+        <div class="msg-name" v-if="props.readonly || (!props.msg.isSelf && isTeamChat)">
           {{ appellation }}
         </div>
          <MessageBubble
@@ -268,7 +272,7 @@
         @onLongpress="handleAvatarLongpress"
       />
       <div class="msg-content">
-        <div class="msg-name" v-if="!props.msg.isSelf">
+        <div class="msg-name" v-if="props.readonly || (!props.msg.isSelf && isTeamChat)">
           {{ appellation }}
         </div>
          <MessageBubble
@@ -315,7 +319,7 @@
         @onLongpress="handleAvatarLongpress"
       />
       <div class="msg-content">
-        <div class="msg-name" v-if="!props.msg.isSelf">
+        <div class="msg-name" v-if="props.readonly || (!props.msg.isSelf && isTeamChat)">
           {{ appellation }}
         </div>
          <MessageBubble
@@ -348,7 +352,7 @@
         @onLongpress="handleAvatarLongpress"
       />
       <div class="msg-content">
-        <div class="msg-name" v-if="!props.msg.isSelf">
+        <div class="msg-name" v-if="props.readonly || (!props.msg.isSelf && isTeamChat)">
           {{ appellation }}
         </div>
          <MessageBubble
@@ -383,7 +387,7 @@
         @onLongpress="handleAvatarLongpress"
       />
       <div class="msg-content">
-        <div class="msg-name" v-if="!props.msg.isSelf">
+        <div class="msg-name" v-if="props.readonly || (!props.msg.isSelf && isTeamChat)">
           {{ appellation }}
         </div>
          <MessageBubble
@@ -416,6 +420,99 @@
       "
       :msg="props.msg"
     />
+    <!-- 地理位置消息 -->
+    <div
+      class="msg-common"
+      v-else-if="
+        props.msg.messageType ===
+        V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION
+      "
+      :style="{ flexDirection: !props.msg.isSelf ? 'row' : 'row-reverse' }"
+    >
+      <Avatar
+        :account="props.msg.senderId"
+        :teamId="teamId"
+        :goto-user-card="!props.readonly"
+        @onLongpress="handleAvatarLongpress"
+      />
+      <div class="msg-content">
+        <div class="msg-name" v-if="props.readonly || (!props.msg.isSelf && isTeamChat)">
+          {{ appellation }}
+        </div>
+         <MessageBubble
+          :msg="props.msg"
+          :tooltip-visible="true"
+          :bg-visible="true"
+          :is-multi-selecting="props.isMultiSelecting"
+          :on-multi-select="props.onMultiSelect"
+          :readonly="props.readonly"
+        >
+          [{{ t("geoMsgText") }}]
+        </MessageBubble>
+      </div>
+    </div>
+    <!-- 机器人消息 -->
+    <div
+      class="msg-common"
+      v-else-if="
+        props.msg.messageType ===
+        V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_ROBOT
+      "
+      :style="{ flexDirection: !props.msg.isSelf ? 'row' : 'row-reverse' }"
+    >
+      <Avatar
+        :account="props.msg.senderId"
+        :teamId="teamId"
+        :goto-user-card="!props.readonly"
+        @onLongpress="handleAvatarLongpress"
+      />
+      <div class="msg-content">
+        <div class="msg-name" v-if="props.readonly || (!props.msg.isSelf && isTeamChat)">
+          {{ appellation }}
+        </div>
+         <MessageBubble
+          :msg="props.msg"
+          :tooltip-visible="true"
+          :bg-visible="true"
+          :is-multi-selecting="props.isMultiSelecting"
+          :on-multi-select="props.onMultiSelect"
+          :readonly="props.readonly"
+        >
+          [{{ t("robotMsgText") }}]
+        </MessageBubble>
+      </div>
+    </div>
+    <!-- 提示消息 -->
+    <div
+      class="msg-common"
+      v-else-if="
+        props.msg.messageType ===
+        V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TIPS
+      "
+      :style="{ flexDirection: !props.msg.isSelf ? 'row' : 'row-reverse' }"
+    >
+      <Avatar
+        :account="props.msg.senderId"
+        :teamId="teamId"
+        :goto-user-card="!props.readonly"
+        @onLongpress="handleAvatarLongpress"
+      />
+      <div class="msg-content">
+        <div class="msg-name" v-if="props.readonly || (!props.msg.isSelf && isTeamChat)">
+          {{ appellation }}
+        </div>
+         <MessageBubble
+          :msg="props.msg"
+          :tooltip-visible="true"
+          :bg-visible="true"
+          :is-multi-selecting="props.isMultiSelecting"
+          :on-multi-select="props.onMultiSelect"
+          :readonly="props.readonly"
+        >
+          [{{ t("tipMsgText") }}]
+        </MessageBubble>
+      </div>
+    </div>
     <!-- 未知消息 -->
     <div
       class="msg-common"
@@ -429,14 +526,14 @@
         @onLongpress="handleAvatarLongpress"
       />
       <div class="msg-content">
-        <div class="msg-name" v-if="!props.msg.isSelf">
+        <div class="msg-name" v-if="props.readonly || (!props.msg.isSelf && isTeamChat)">
           {{ appellation }}
         </div>
          <MessageBubble
           :msg="props.msg"
           :tooltip-visible="true"
           :bg-visible="true"
-        
+
           :is-multi-selecting="props.isMultiSelecting"
           :on-multi-select="props.onMultiSelect"
           :readonly="props.readonly"
@@ -450,7 +547,28 @@
       :class="props.msg.isSelf ? 'msg-pin-tip msg-pin-tip-self' : 'msg-pin-tip'"
     >
       <Icon type="icon-green-pin" :size="12" />
-      <span class="msg-pin-tip-text">{{ pinTip }}</span>
+      <template v-if="isEnglish">
+        <span class="msg-pin-tip-label">{{ pinTipLabel }} </span>
+        <span class="msg-pin-tip-name">{{ pinTipName }}</span>
+      </template>
+      <template v-else>
+        <span class="msg-pin-tip-name">{{ pinTipName }}</span>
+        <span class="msg-pin-tip-label">{{ pinTipLabel }}</span>
+      </template>
+    </div>
+    <div
+      v-if="videoPlayerVisible"
+      class="video-player-overlay"
+      @click="videoPlayerVisible = false"
+    >
+      <button class="video-player-close" type="button" @click="videoPlayerVisible = false" aria-label="关闭">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+          <circle cx="14" cy="14" r="14" fill="#4C4C4C"/>
+          <line x1="9" y1="9" x2="18.5" y2="18.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+          <line x1="19" y1="9" x2="9.5" y2="18.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <video :src="videoPlayerUrl" controls autoplay playsinline @click.stop></video>
     </div>
   </div>
 </template>
@@ -549,6 +667,10 @@ const conversationType = computed(() => {
     props.msg.conversationId
   ) as unknown as V2NIMConst.V2NIMConversationType;
 });
+const isTeamChat = computed(() =>
+  conversationType.value ===
+  V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM
+);
 // 会话对象
 const to = computed(() => {
   if (!canParseConversationId.value) {
@@ -607,13 +729,18 @@ const handleImageTouch = (url: string) => {
   }
 };
 
+// 视频播放 overlay 状态
+const videoPlayerUrl = ref('')
+const videoPlayerVisible = ref(false)
+
 // 点击视频播放
 const handleVideoTouch = (msg: V2NIMMessageForUI) => {
    //@ts-ignore
    const url = msg.attachment?.url;
   if (url) {
-    // 在新窗口打开视频
-    window.open(url, '_blank', 'noopener,noreferrer');
+    // 在当前页面打开视频播放 overlay，不跳转新窗口
+    videoPlayerUrl.value = url
+    videoPlayerVisible.value = true
   }
 };
 
@@ -692,7 +819,9 @@ const isPinned = computed(() => {
   );
 });
 
-const pinTip = computed(() => {
+const pinTipLabel = computed(() => t("pinThisText"));
+const isEnglish = computed(() => getLanguage() === "en");
+const pinTipName = computed(() => {
   const pinInfoMap = store?.msgStore.pinMsgs.map.get(props.msg.conversationId);
   const pinOperatorId = getPinOperatorId(props.msg, pinInfoMap);
   const pinOperatorName = pinOperatorId
@@ -705,14 +834,9 @@ const pinTip = computed(() => {
             : "",
       })
     : "";
-  const pinTipName =
-    pinOperatorId === store?.userStore.myUserInfo?.accountId
-      ? t("you")
-      : pinOperatorName || pinOperatorId;
-  const isEnglish = getLanguage() === "en";
-  return isEnglish
-    ? `${t("pinThisText")} ${pinTipName}`
-    : `${pinTipName}${t("pinThisText")}`;
+  return pinOperatorId === store?.userStore.myUserInfo?.accountId
+    ? t("you")
+    : pinOperatorName || pinOperatorId;
 });
 
 onUnmounted(() => {
@@ -722,7 +846,7 @@ onUnmounted(() => {
 
 <style scoped>
 .msg-item-wrapper {
-  padding: 0 20px 10px 20px;
+  padding: 8px 20px;
   position: relative;
   box-sizing: border-box;
 }
@@ -752,18 +876,15 @@ onUnmounted(() => {
 }
 
 .msg-select-box {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   box-sizing: border-box;
-  border: 2px solid #a5adb8;
+  border: 1px solid #969AA0;
   border-radius: 50%;
   background: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  font-size: 16px;
-  line-height: 1;
 }
 
 .msg-select-box.selected {
@@ -772,11 +893,9 @@ onUnmounted(() => {
 }
 
 .msg-select-check {
-  font-weight: bold;
 }
 
 .msg-common {
-  padding-top: 8px;
   display: flex;
   align-items: flex-start;
   font-size: 16px;
@@ -785,19 +904,25 @@ onUnmounted(() => {
   font-size: 11px;
   font-weight: normal;
   color: #3eaf96;
-  margin: 8px 50px 0 50px;
+  margin: 0 50px;
+  margin-top: 8px;
   display: flex;
   align-items: center;
+  gap: 4px;
   white-space: nowrap;
   overflow: hidden;
 }
 .msg-pin-tip-self {
   justify-content: flex-end;
 }
-.msg-pin-tip-text {
-  margin-left: 4px;
+.msg-pin-tip-label {
+  flex-shrink: 0;
+}
+.msg-pin-tip-name {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 .loading-spinner {
   width: 20px;
@@ -853,36 +978,7 @@ onUnmounted(() => {
   color: #1861df;
 }
 
-.msg-recall2 {
-  font-size: 16px;
-}
-
-.self-msg-recall {
-  max-width: 360px;
-  overflow: hidden;
-  padding: 12px 16px;
-  border-radius: 8px 0px 8px 8px;
-  margin-right: 8px;
-  background-color: #d6e5f6;
-  color: #666666;
-}
-
 .recall-text{
-  color: #666666;
-}
-
-.msg-recall {
-  max-width: 360px;
-  width: fit-content;
-  overflow: hidden;
-  padding: 12px 16px;
-  border-radius: 0px 8px 8px 8px;
-  margin-left: 8px;
-  background-color: #e8eaed;
-  color: #666666;
-}
-
-.recall-text {
   color: #666666;
 }
 
@@ -893,7 +989,8 @@ onUnmounted(() => {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.8);
   border-radius: 50%;
   z-index: 9;
 }
@@ -913,5 +1010,36 @@ onUnmounted(() => {
 .video-msg-wrapper {
   box-sizing: border-box;
   max-width: 360px;
+}
+
+.video-player-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  .video-player-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    z-index: 10;
+  }
+
+  video {
+    max-width: 100vw;
+    max-height: 70vh;
+  }
 }
 </style>

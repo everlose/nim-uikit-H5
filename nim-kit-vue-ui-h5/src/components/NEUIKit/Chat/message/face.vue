@@ -1,46 +1,50 @@
 <template>
-  <div class="msg-face-wrapper">
-    <div class="msg-face">
-      <div class="msg-face-row" v-for="(emojiRow, rowIndex) in emojiMatrix">
+  <div class="emoji-panel-wrapper">
+    <div class="emoji-pages" ref="scrollRef" @scroll="handleScroll">
+      <div
+        class="emoji-page"
+        v-for="(page, pageIdx) in pages"
+        :key="pageIdx"
+      >
         <div
-          @click="
-            () => {
-              handleEmojiClick({ key, type: emojiMap[key] });
-            }
-          "
-          v-for="key in emojiRow"
-          :key="key"
-          class="msg-face-item"
+          class="msg-face-row"
+          v-for="(row, rowIdx) in page"
+          :key="rowIdx"
         >
-          <Icon :size="27" :type="emojiMap[key]"></Icon>
+          <template v-for="colIdx in COLS" :key="colIdx">
+            <div
+              v-if="rowIdx === lastItemRowIdx(page) && colIdx === COLS"
+              class="msg-face-item msg-face-delete"
+              @click="handleEmojiDelete"
+            >
+              <Icon type="icon-delete-light" :size="27" />
+            </div>
+            <div
+              v-else-if="row[colIdx - 1]"
+              class="msg-face-item"
+              @click="handleEmojiClick(row[colIdx - 1])"
+            >
+              <Icon :size="27" :type="emojiMap[row[colIdx - 1]]" />
+            </div>
+            <div v-else class="msg-face-item msg-face-placeholder" />
+          </template>
         </div>
-        <!-- 下面放三个看不到的 Icon 占个位 -->
-        <Icon
-          v-if="rowIndex + 1 === Math.ceil(emojiArr.length / emojiColNum)"
-          class="msg-face-delete"
-          :size="27"
-          type="icon-tuigejian"
-        ></Icon>
-        <Icon
-          v-if="rowIndex + 1 === Math.ceil(emojiArr.length / emojiColNum)"
-          class="msg-face-delete"
-          :size="27"
-          type="icon-tuigejian"
-        ></Icon>
-        <Icon
-          v-if="rowIndex + 1 === Math.ceil(emojiArr.length / emojiColNum)"
-          class="msg-face-delete"
-          :size="27"
-          type="icon-tuigejian"
-        ></Icon>
       </div>
     </div>
-    <div class="emoji-block"></div>
+
+    <!-- 页面指示器 -->
+    <div v-if="pages.length > 1" class="emoji-indicator">
+      <div
+        v-for="(_, idx) in pages"
+        :key="idx"
+        class="emoji-dot"
+        :class="{ active: idx === activePage }"
+      />
+    </div>
+
+    <!-- 底部操作栏 -->
     <div class="msg-face-control">
-      <div @click="handleEmojiDelete" class="msg-delete-btn">
-        <Icon type="icon-tuigejian" :size="25" :color="'#000'" />
-      </div>
-      <div @click="handleEmojiSend" class="msg-send-btn">
+      <div class="msg-send-btn" @click="handleEmojiSend">
         {{ t("sendText") }}
       </div>
     </div>
@@ -48,19 +52,54 @@
 </template>
 
 <script lang="ts" setup>
+import { ref, computed } from "vue";
 import { emojiMap } from "../../utils/emoji";
-import { culculateMatrix } from "../../utils/matrix";
 import Icon from "../../CommonComponents/Icon.vue";
 import { t } from "../../utils/i18n";
-// 七个一行
-const emojiArr = Object.keys(emojiMap);
-const emojiColNum = 7;
-const emojiMatrix = culculateMatrix(emojiArr, emojiColNum);
 
+const ROWS_PER_PAGE = 3;
+const COLS = 7;
+const ITEMS_PER_PAGE = ROWS_PER_PAGE * COLS - 1; // 每页留最后一位给删除按钮
+
+const emojiArr = Object.keys(emojiMap);
 const emit = defineEmits(["emojiClick", "emojiSend", "emojiDelete"]);
 
-const handleEmojiClick = (emoji: any) => {
-  emit("emojiClick", emoji);
+// 按每页 ITEMS_PER_PAGE 个表情拆分，末位留给删除按钮
+const pages = computed(() => {
+  const result: string[][][] = [];
+  let offset = 0;
+  while (offset < emojiArr.length) {
+    const pageItems = emojiArr.slice(offset, offset + ITEMS_PER_PAGE);
+    offset += ITEMS_PER_PAGE;
+    const page: string[][] = [];
+    for (let i = 0; i < pageItems.length; i += COLS) {
+      page.push(pageItems.slice(i, i + COLS));
+    }
+    while (page.length < ROWS_PER_PAGE) {
+      page.push([]);
+    }
+    result.push(page);
+  }
+  return result;
+});
+
+const scrollRef = ref<HTMLDivElement>();
+const activePage = ref(0);
+
+const handleScroll = () => {
+  if (scrollRef.value) {
+    const pageWidth = scrollRef.value.clientWidth;
+    const page = Math.round(scrollRef.value.scrollLeft / pageWidth);
+    activePage.value = page;
+  }
+};
+
+const lastItemRowIdx = (page: string[][]) => {
+  return page.reduce((acc, r, i) => (r.length > 0 ? i : acc), 0);
+};
+
+const handleEmojiClick = (key: string) => {
+  emit("emojiClick", { key, type: emojiMap[key] });
 };
 
 const handleEmojiDelete = () => {
@@ -73,65 +112,85 @@ const handleEmojiSend = () => {
 </script>
 
 <style scoped>
-.msg-face-wrapper {
-  box-sizing: border-box;
-}
-
-.msg-face-control {
-  position: fixed;
-  bottom: 8px;
-  right: 10px;
-  z-index: 8;
-}
-
-.emoji-block {
-  width: 100%;
-  height: 40px;
-  background-color: transparent;
-}
-
-.msg-face {
+.emoji-panel-wrapper {
+  background: #fff;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  padding-bottom: 10px;
+}
+
+.emoji-pages {
+  flex: 1;
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.emoji-pages::-webkit-scrollbar {
+  display: none;
+}
+
+.emoji-page {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
 }
 
 .msg-face-row {
   display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  padding: 5px 12px;
-}
-
-.msg-face-row:last-child {
-  flex-basis: 57.14%;
+  justify-content: space-around;
+  padding: 4px 0;
 }
 
 .msg-face-item {
-  font-size: 27px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.msg-face-delete {
-  font-size: 27px;
+.msg-face-placeholder {
   visibility: hidden;
+}
+
+.emoji-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4px 0 6px;
+  gap: 6px;
+}
+
+.emoji-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #ccc;
+  transition: background 0.2s;
+}
+
+.emoji-dot.active {
+  background: #8f8f8f;
 }
 
 .msg-face-control {
   display: flex;
-  flex-direction: row;
+  justify-content: flex-end;
   align-items: center;
+  border-top: 1px solid #f0f0f0;
+}
+
+.msg-face-delete {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .msg-send-btn {
   padding: 6px 16px;
+  background: #337eff;
   color: #fff;
-  background-color: #337eff;
-}
-
-.msg-delete-btn {
-  background-color: #fff;
-  margin-right: 10px;
-  padding: 0 16px;
 }
 </style>

@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from '@/utils/router'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { toast } from '@/NEUIKit/common/utils/toast'
+import { useTeamNotification } from '@/NEUIKit/common/hooks/useTeamNotification'
 
 import NavBar from '@/NEUIKit/common/components/NavBar'
 import Input from '@/NEUIKit/common/components/Input'
@@ -29,6 +30,8 @@ const TeamIntroduceEdit: React.FC = observer(() => {
   // 编辑类型：name 或 intro
   const [type, setType] = useState<string>('')
 
+  useTeamNotification(teamId)
+
   // 根据类型确定最大长度
   const maxLength = useMemo(() => {
     return type === 'name' ? 30 : 100
@@ -46,7 +49,7 @@ const TeamIntroduceEdit: React.FC = observer(() => {
 
   // 处理输入变化
   const handleInput = useCallback((value: string) => {
-    setInputValue(value ? value.replace(/\s*/g, '') : value)
+    setInputValue(value ? value.trim() : value)
   }, [])
 
   // 保存群名称/介绍

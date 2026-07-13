@@ -59,7 +59,7 @@
 /**@ 列表组件，用于在群里@ 成员列表 */
 import { ref, computed, onUnmounted, getCurrentInstance } from "vue";
 import { t } from "../../utils/i18n";
-import { autorun } from "mobx";
+import { autorun, untracked } from "mobx";
 import Avatar from "../../CommonComponents/Avatar.vue";
 import Icon from "../../CommonComponents/Icon.vue";
 import { ALLOW_AT, AT_ALL_ACCOUNT } from "../../utils/constants";
@@ -192,12 +192,23 @@ const handleItemClick = (member: V2NIMTeamMember) => {
 /** 监听群成员 */
 const teamMemberWatch = autorun(() => {
   if (props.teamId) {
-    teamMembers.value = sortGroupMembers(
-      store?.teamMemberStore.getTeamMember(props.teamId) as V2NIMTeamMember[],
+    const members = store?.teamMemberStore.getTeamMember(
       props.teamId
-    );
+    ) as V2NIMTeamMember[];
+    teamMembers.value = sortGroupMembers(members, props.teamId);
+
+    // 预加载缺失的群成员用户资料，避免列表名称从 accid 闪现为昵称
+    untracked(() => {
+      const missingAccountIds = (members || [])
+        .map((m) => m.accountId)
+        .filter((id) => !store?.userStore.users.has(id));
+      if (missingAccountIds.length > 0) {
+        store?.userStore.getUserListFromCloudActive(missingAccountIds);
+      }
+    });
+
     const _team = store?.teamStore.teams.get(props.teamId);
-    if (team) {
+    if (_team) {
       team.value = _team;
       teamExt.value = _team?.serverExtension || "";
     }

@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react'
+import { flushSync } from 'react-dom'
+import { useLongPress } from '@/NEUIKit/common/hooks/useLongPress'
 import './index.less'
 
 export interface TooltipProps {
@@ -49,10 +51,19 @@ const Tooltip = forwardRef<TooltipRef, TooltipProps>(({ content, color = '#30313
   const [placement, setPlacement] = useState<'top' | 'bottom'>('top')
 
   // 引用
-  const contentRef = useRef<HTMLDivElement>(null)
   const popperRef = useRef<HTMLDivElement>(null)
-  const touchTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const touchStartPositionRef = useRef<{ x: number; y: number } | null>(null)
+
+  // 长按 hook
+  const {
+    onTouchStart,
+    onTouchEnd,
+    onTouchMove,
+    onTouchCancel,
+    onContextMenu,
+    ref: contentRef,
+    longPressTriggered,
+    touchPosition,
+  } = useLongPress<HTMLDivElement>({ onLongPress: handleClick })
 
   // 暴露 close 方法给外部使用
   useImperativeHandle(ref, () => ({
@@ -76,6 +87,11 @@ const Tooltip = forwardRef<TooltipRef, TooltipProps>(({ content, color = '#30313
   // 添加全局点击监听
   useEffect(() => {
     const handleGlobalClick = () => {
+      // Android: 长按打开菜单后 touchend 会触发 click，短暂忽略
+      if (longPressTriggered.current) {
+        longPressTriggered.current = false
+        return
+      }
       setIsShow(false)
       setPopperRendered(false)
     }
@@ -105,7 +121,7 @@ const Tooltip = forwardRef<TooltipRef, TooltipProps>(({ content, color = '#30313
         const windowHeight = window.innerHeight
         const margin = 10
         const gap = 8
-        const touchPoint = touchStartPositionRef.current
+        const touchPoint = touchPosition.current
         const anchorX = touchPoint?.x || contentRect.left + contentRect.width / 2
         const anchorY = touchPoint?.y || contentRect.top + contentRect.height / 2
         const popperWidth = popperRect.width
@@ -134,12 +150,15 @@ const Tooltip = forwardRef<TooltipRef, TooltipProps>(({ content, color = '#30313
   }
 
   // 处理点击
-  const handleClick = async () => {
+  async function handleClick() {
     if (isShow) {
       setPopperRendered(false)
       return setIsShow(false)
     }
-    setPopperRendered(true)
+    // flushSync 确保 React 立即提交 DOM 更新，否则 rAF 时 popperRef 仍为 null
+    flushSync(() => {
+      setPopperRendered(true)
+    })
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => resolve())
     })
@@ -149,42 +168,6 @@ const Tooltip = forwardRef<TooltipRef, TooltipProps>(({ content, color = '#30313
       return
     }
     setIsShow(true)
-  }
-
-  // 触摸处理函数
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartPositionRef.current = {
-      x: e.touches[0].clientX,
-      y: e.touches[0].clientY
-    }
-
-    touchTimerRef.current = setTimeout(() => {
-      // 检查是否移动了太多
-      const currentX = e.touches[0].clientX
-      const currentY = e.touches[0].clientY
-      const startPos = touchStartPositionRef.current
-
-      if (startPos) {
-        const moveDistance = Math.sqrt(Math.pow(currentX - startPos.x, 2) + Math.pow(currentY - startPos.y, 2))
-
-        if (moveDistance < 10) {
-          // 允许少量移动
-          handleClick()
-        }
-      }
-    }, 500) // 长按时间阈值：500ms
-  }
-
-  const handleTouchEnd = () => {
-    if (touchTimerRef.current) {
-      clearTimeout(touchTimerRef.current)
-    }
-  }
-
-  const handleTouchMove = () => {
-    if (touchTimerRef.current) {
-      clearTimeout(touchTimerRef.current)
-    }
   }
 
   const close = (e: React.TouchEvent) => {
@@ -213,7 +196,7 @@ const Tooltip = forwardRef<TooltipRef, TooltipProps>(({ content, color = '#30313
 
   return (
     <div className="nim-tooltip" style={tooltipStyle}>
-      <div ref={contentRef} className="nim-tooltip-content" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchMove={handleTouchMove}>
+      <div ref={contentRef} className="nim-tooltip-content" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onTouchMove={onTouchMove} onTouchCancel={onTouchCancel} onContextMenu={onContextMenu}>
         {children}
 
         {isShow && <div className="nim-tooltip-mask" onTouchStart={close}></div>}

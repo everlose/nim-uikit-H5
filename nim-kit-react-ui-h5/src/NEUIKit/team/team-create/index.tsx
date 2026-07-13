@@ -58,7 +58,7 @@ const TeamCreate: React.FC = observer(() => {
   // 处理选择变化
   const checkboxChange = useCallback((selectList: string | string[]) => {
     if (Array.isArray(selectList)) {
-      if (selectList.length >= 200) {
+      if (selectList.length > 200) {
         toast.info(t('maxSelectedText'))
         return
       }
@@ -134,9 +134,10 @@ const TeamCreate: React.FC = observer(() => {
       const teamId = team?.teamId
 
       if (teamId) {
-        store?.uiStore.selectConversation(nim.V2NIMConversationIdUtil.teamConversationId(teamId))
+        const conversationId = nim.V2NIMConversationIdUtil.teamConversationId(teamId)
+        store?.uiStore.selectConversation(conversationId)
 
-        navigate(neUiKitRouterPath.chat)
+        navigate(`${neUiKitRouterPath.chat}?conversationId=${conversationId}`)
       }
 
       toast.info(t('createTeamSuccessText'))
@@ -151,14 +152,19 @@ const TeamCreate: React.FC = observer(() => {
     <div className="create-team-container">
       <NavBar
         title={t('createTeamText')}
+        showLeft
+        leftContent={<div className="nav-cancel-btn" onClick={() => navigate(-1)}>{t('cancelText')}</div>}
         rightContent={
-          <div className="create-team-button" onClick={createTeam}>
-            {t('okText')}
+          <div
+            className={`create-team-button${teamMembers.length === 0 ? ' disabled' : ''}`}
+            onClick={teamMembers.length === 0 ? undefined : createTeam}
+          >
+            {teamMembers.length > 0 ? `${t('yesText')}(${teamMembers.length})` : t('yesText')}
           </div>
         }
       />
       <div className="create-team-content">
-        <PersonSelect personList={friendList} onCheckboxChange={checkboxChange} radio={false} showBtn={false} max={200} />
+        <PersonSelect personList={friendList} onCheckboxChange={checkboxChange} radio={false} showBtn={false} max={200} onMaxExceeded={() => toast.info(t('maxSelectedText'))} />
       </div>
     </div>
   )

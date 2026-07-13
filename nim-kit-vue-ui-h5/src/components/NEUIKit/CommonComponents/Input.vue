@@ -13,7 +13,7 @@
       :disabled="disabled"
       :maxlength="maxlength"
       :style="inputStyle"
-      class="input"
+      class="nim-input"
       autocomplete="off"
       @input="handleInput"
       @focus="handleFocus"
@@ -21,7 +21,10 @@
       @keypress="handleKeypress"
     />
     <span v-if="showClear && modelValue" class="clear-icon" @click="clearInput">
-      ×
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="8" cy="8" r="8" fill="#B3B7BC"/>
+        <path d="M5.5 5.5L10.5 10.5M10.5 5.5L5.5 10.5" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
     </span>
   </div>
 </template>
@@ -141,7 +144,7 @@ defineExpose({
   padding-right: 10px;
 }
 
-.input {
+.nim-input {
   width: 100%;
   height: 36px;
   border: none;
@@ -155,19 +158,19 @@ defineExpose({
   white-space: nowrap;
 }
 
-.input:focus {
+.nim-input:focus {
   border-color: #409eff;
 }
 
-.input:hover {
+.nim-input:hover {
   border-color: #c0c4cc;
 }
 
-.input::placeholder {
+.nim-input::placeholder {
   color: #c0c4cc;
 }
 
-.is-disabled .input {
+.is-disabled .nim-input {
   background-color: #f5f7fa;
   border-color: #e4e7ed;
   color: #c0c4cc;
@@ -180,17 +183,14 @@ defineExpose({
   top: 50%;
   transform: translateY(-50%);
   cursor: pointer;
-  color: #c0c4cc;
-  font-size: 16px;
   width: 16px;
   height: 16px;
-  border-radius: 50%;
-  border: 1px solid #c0c4cc;
-  text-align: center;
-  line-height: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .clear-icon:hover {
-  color: #909399;
+  opacity: 0.8;
 }
 </style>

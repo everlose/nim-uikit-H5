@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from '@/utils/router'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { neUiKitRouterPath } from '@/NEUIKit/common/utils/uikitRouter'
+import { useTeamNotification } from '@/NEUIKit/common/hooks/useTeamNotification'
 
 import NavBar from '@/NEUIKit/common/components/NavBar'
 import Avatar from '@/NEUIKit/common/components/Avatar'
@@ -22,6 +23,7 @@ const TeamInfoEdit: React.FC = observer(() => {
   // 从 URL 查询参数获取群 ID
   const params = new URLSearchParams(location.search)
   const teamId = params.get('teamId') || ''
+  useTeamNotification(teamId)
   const team = store.teamStore.teams.get(teamId)
   const avatar = team?.avatar
 
@@ -65,14 +67,14 @@ const TeamInfoEdit: React.FC = observer(() => {
             <div className="team-set-item-flex" onClick={handleTitleClick}>
               <div className="team-set-item-team-name">{t('teamTitle')}</div>
               <div className="team-set-item-right">
-                <span className="team-set-item-name">{team.name}</span>
+                {/* <span className="team-set-item-name">{team.name}</span> */}
                 <Icon iconClassName="more-icon" style={{ color: '#999' }} type="icon-jiantou" />
               </div>
             </div>
             <div className="team-set-item-flex" onClick={handleIntroClick}>
               <div className="team-set-item-team-intro">{t('teamIntro')}</div>
               <div className="team-set-item-right">
-                <span className="team-set-item-name">{team.intro}</span>
+                {/* <span className="team-set-item-name">{team.intro}</span> */}
                 <Icon iconClassName="more-icon" style={{ color: '#999' }} type="icon-jiantou" />
               </div>
             </div>

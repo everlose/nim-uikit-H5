@@ -98,7 +98,12 @@ const handleItemClick = async () => {
       );
     }
 
-    router.push(neUiKitRouterPath.chat);
+    const cId =
+        conversationType ===
+        V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM
+          ? proxy!.$NIM.V2NIMConversationIdUtil.teamConversationId(receiverId)
+          : proxy!.$NIM.V2NIMConversationIdUtil.p2pConversationId(receiverId);
+    router.push(`${neUiKitRouterPath.chat}?conversationId=${cId}`);
   } catch {
     showToast({
       message: t("selectSessionFailText"),
