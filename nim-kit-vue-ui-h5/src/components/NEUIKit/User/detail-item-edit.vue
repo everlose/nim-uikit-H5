@@ -1,6 +1,6 @@
 <template>
   <div class="wrapper">
-    <NavBar :title="t(key)">
+    <NavBar :title="t(key)" backgroundColor="transparent">
       <template v-slot:right>
         <div class="nav-bar-text" @click="onUserInfoConfirm">
           {{ t("okText") }}
@@ -139,8 +139,7 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  background-color: rgb(245, 246, 247);
-  background-color: rgb(245, 246, 247);
+  background-color: #E9EFF5;
 }
 
 .userInfo-item-wrapper {
@@ -148,11 +147,14 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   background-color: #fff;
-  margin: 15px;
-  border-radius: 5px;
+  margin: 22px 20px 0 20px;
+  padding: 0 16px;
+  border-radius: 8px;
+  height: 40px;
 }
 .nav-bar-text {
-  color: rgb(20, 146, 209);
+  color: #666666;
+  font-size: 16px;
 }
 .input {
   display: inline-block;

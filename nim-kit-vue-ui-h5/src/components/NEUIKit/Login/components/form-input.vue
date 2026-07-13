@@ -9,6 +9,8 @@
         @input="handleInput"
         @blur="handleBlur"
         :placeholder="placeholder"
+        :showClear="allowClear"
+        @clear="clearInput"
       />
       <slot name="addonAfter" />
     </div>
@@ -77,7 +79,7 @@ const handleBlur = () => {
 };
 
 const clearInput = () => {
-  emit("updateModelValue", null);
+  emit("updateModelValue", "");
   inputFocus.value = true;
 };
 </script>
@@ -110,6 +112,6 @@ const clearInput = () => {
 .error-tips {
   color: #f56c6c;
   font-size: 12px;
-  margin-top: 5px;
+  padding-top: 2px;
 }
 </style>

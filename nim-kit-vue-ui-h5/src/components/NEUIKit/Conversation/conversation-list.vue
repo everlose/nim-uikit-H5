@@ -1,10 +1,5 @@
 <template>
-  <div class="conversation-wrapper">
-    <div
-      class="dropdown-mark"
-      v-if="addDropdownVisible"
-      @touchstart="hideAddDropdown"
-    ></div>
+  <div class="conversation-wrapper" @click="hideAddDropdown">
     <div class="navigation-bar">
       <div class="logo-box">
         <img
@@ -13,11 +8,15 @@
         />
         <div>{{ t("appText") }}</div>
       </div>
-      <div :class="buttonClass">
-        <div class="button-icon-add" @click="showAddDropdown">
-          <Icon type="icon-More" :size="24" />
+      <div class="right-actions">
+        <div class="button-icon-search" @click.stop="goToSearchPage">
+          <Icon type="icon-sousuo" :size="20" />
         </div>
-        <div v-if="addDropdownVisible" class="dropdown-container">
+        <div :class="buttonClass">
+          <div class="button-icon-add" @click.stop="showAddDropdown">
+            <Icon type="icon-add" :size="20" />
+          </div>
+          <div v-if="addDropdownVisible" class="dropdown-container" @click.stop>
           <div class="add-menu-list">
             <div class="add-menu-item" @click="onDropdownClick('addFriend')">
               <Icon type="icon-tianjiahaoyou" :style="{ marginRight: '5px' }" />
@@ -32,28 +31,16 @@
             </div>
           </div>
         </div>
+        </div>
       </div>
     </div>
     <NetworkAlert />
+    <div class="security-tip">
+      <svg class="security-tip-icon" width="14" height="14" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M10.5 0C4.706 0 0 4.706 0 10.5S4.706 21 10.5 21 21 16.294 21 10.5 16.294 0 10.5 0zm.75 15h-1.5v1.5h1.5V15zm-1.5-2V4.5h1.5V13h-1.5z" fill="#FC596A"/>
+      </svg>{{ t("securityTipText") }}<span class="security-tip-report" @click="handleReportClick">{{ t("reportText") }}</span>
+    </div>
     <div v-if="!conversationList || conversationList.length === 0" class="conversation-list-wrapper">
-      <div class="security-tip">
-        <div>
-          {{ t("securityTipText") }}
-        </div>
-      </div>
-      <div class="conversation-search" @click="goToSearchPage">
-        <div class="search-input-wrapper">
-          <div class="search-icon-wrapper">
-            <Icon
-              iconClassName="search-icon"
-              :size="16"
-              color="#A6ADB6"
-              type="icon-sousuo"
-            ></Icon>
-          </div>
-          <div class="search-input">{{ t("searchText") }}</div>
-        </div>
-      </div>
       <Empty
         v-if="conversationList.length === 0"
         :text="t('conversationEmptyText')"
@@ -65,24 +52,6 @@
       ref="listWrapper"
       @scroll="handleScroll"
     >
-      <div class="security-tip">
-        <div>
-          {{ t("securityTipText") }}
-        </div>
-      </div>
-      <div class="conversation-search" @click="goToSearchPage">
-        <div class="search-input-wrapper">
-          <div class="search-icon-wrapper">
-            <Icon
-              iconClassName="search-icon"
-              :size="16"
-              color="#A6ADB6"
-              type="icon-sousuo"
-            ></Icon>
-          </div>
-          <div class="search-input">{{ t("searchText") }}</div>
-        </div>
-      </div>
       <div
         v-for="conversation in conversationList"
         :key="conversation.conversationId"
@@ -113,6 +82,7 @@ import Empty from "../CommonComponents/Empty.vue";
 import ConversationItem from "./conversation-item.vue";
 import { t } from "../utils/i18n";
 import { showToast } from "../utils/toast";
+import { showModal } from "../utils/modal";
 import type {
   V2NIMConversationForUI,
   V2NIMLocalConversationForUI,
@@ -212,6 +182,42 @@ const handleSessionItemClick = async (
   currentMoveSessionId.value = "";
   try {
     flag = true;
+
+    // 群聊会话：进入前检查群是否仍然有效（已解散等）
+    if (
+      conversation.type ===
+        V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM
+    ) {
+      try {
+        const teamId =
+          nim.V2NIMConversationIdUtil.parseConversationTargetId(
+            conversation.conversationId
+          );
+        const team = await store.teamStore.getTeamForceActive(teamId);
+        if (!team.isValidTeam) {
+          showModal({
+            title: t("tipText"),
+            content: t("chatTeamInvalidText"),
+            cancelText: "",
+            onConfirm: () => {
+              if (enableV2CloudConversation) {
+                store.conversationStore?.deleteConversationActive(
+                  conversation.conversationId
+                );
+              } else {
+                store.localConversationStore?.deleteConversationActive(
+                  conversation.conversationId
+                );
+              }
+            },
+          });
+          return;
+        }
+      } catch {
+        // getTeamForceActive 失败时允许继续进入（由 Chat 页面的兜底检查处理）
+      }
+    }
+
     // 处理@消息相关
     if (
       conversation.type ===
@@ -231,7 +237,7 @@ const handleSessionItemClick = async (
     }
 
     await store?.uiStore.selectConversation(conversation.conversationId);
-    router.push(neUiKitRouterPath.chat);
+    router.push(`${neUiKitRouterPath.chat}?conversationId=${conversation.conversationId}`);
   } catch {
     showToast({
       message: t("selectSessionFailText"),
@@ -246,6 +252,16 @@ const handleSessionItemClick = async (
 const handleSessionItemDeleteClick = async (
   conversation: V2NIMConversationForUI | V2NIMLocalConversationForUI
 ) => {
+  if (
+    store?.connectStore.loginStatus !==
+    V2NIMConst.V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINED
+  ) {
+    showToast({
+      message: t("networkError"),
+      type: "info",
+    });
+    return;
+  }
   try {
     if (enableV2CloudConversation) {
       await store?.conversationStore?.deleteConversationActive(
@@ -319,23 +335,22 @@ const hideAddDropdown = () => {
 };
 
 const onDropdownClick = (urlType: "addFriend" | "createGroup") => {
-  const urlMap = {
-    // 添加好友
-    addFriend: neUiKitRouterPath.addFriend,
-    // 创建群聊
-    createGroup: neUiKitRouterPath.teamCreate,
-  };
   addDropdownVisible.value = false;
-  const path = urlMap[urlType];
-
-  router.push({
-    name: urlType === "addFriend" ? "AddFriend" : "TeamCreate",
-  });
+  setTimeout(() => {
+    router.push({
+      name: urlType === "addFriend" ? "AddFriend" : "TeamCreate",
+    });
+  }, 0);
 };
 
 /** 跳转至搜索页面 */
 const goToSearchPage = () => {
   router.push(neUiKitRouterPath.conversationSearch);
+};
+
+/** 举报点击 */
+const handleReportClick = () => {
+  window.open("https://yunxin.163.com/survey/report", "_blank");
 };
 
 /** 监听会话列表 */
@@ -375,6 +390,7 @@ onUnmounted(() => {
   height: 60px;
   border-bottom: 1px solid #e9eff5;
   padding-left: 20px;
+  padding-right: 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -385,51 +401,24 @@ onUnmounted(() => {
   z-index: 999;
 }
 
-.conversation-search {
-  display: flex;
-  align-items: center;
-  height: 54px;
-  box-sizing: border-box;
-  overflow: hidden;
-  padding: 10px;
-}
-
 .security-tip {
-  padding: 0 10px;
+  padding: 6px 16px;
   background: #fff5e1;
-  height: 50px;
   width: 100%;
   box-sizing: border-box;
-  font-size: 14px;
-  text-align: center;
-  white-space: wrap;
+  font-size: 13px;
+  line-height: 150%;
   color: #eb9718;
-  text-align: left;
-  display: flex;
-  align-items: center;
 }
 
-.search-input-wrapper {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  height: 34px;
-  overflow: hidden;
-  box-sizing: border-box;
-  padding: 8px 10px;
-  background: #f3f5f7;
-  border-radius: 5px;
+.security-tip-icon {
+  vertical-align: text-top;
+  margin-right: 4px;
 }
 
-.search-input {
-  margin-left: 5px;
-  color: #999999;
-}
-
-.search-icon-wrapper {
-  height: 22px;
-  display: flex;
-  align-items: center;
+.security-tip-report {
+  color: #3370ff;
+  cursor: pointer;
 }
 
 .conversation-list-wrapper {
@@ -460,18 +449,19 @@ onUnmounted(() => {
   color: #000;
 }
 
-.button-icon-add {
-  position: relative;
-  right: 20px;
+.right-actions {
+  display: flex;
+  align-items: center;
+  gap: 15px;
 }
 
-.dropdown-mark {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1;
+.button-icon-search {
+  cursor: pointer;
+  color: #333;
+}
+
+.button-box {
+  position: relative;
 }
 
 .dropdown-container {

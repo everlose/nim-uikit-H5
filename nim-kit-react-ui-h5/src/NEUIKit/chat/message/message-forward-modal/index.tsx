@@ -15,6 +15,13 @@ interface ForwardToTeamInfo {
   avatar: string
 }
 
+interface ForwardTargetInfo {
+  id: string
+  type: number
+  name: string
+  avatar?: string
+}
+
 interface MessageForwardModalProps {
   forwardModalVisible: boolean
   forwardTo: string
@@ -24,6 +31,7 @@ interface MessageForwardModalProps {
   forwardToTeamInfo?: ForwardToTeamInfo
   isOneByOneForward?: boolean
   isMergeForward?: boolean
+  forwardTargets?: ForwardTargetInfo[]
   onConfirm: (comment: string) => void
   onCancel: () => void
 }
@@ -32,7 +40,7 @@ interface MessageForwardModalProps {
  * 消息转发模态框组件
  */
 const MessageForwardModal: React.FC<MessageForwardModalProps> = observer(
-  ({ forwardModalVisible, forwardTo, forwardMsg, sourceConversationId, forwardConversationType, forwardToTeamInfo, isOneByOneForward, isMergeForward, onConfirm, onCancel }) => {
+  ({ forwardModalVisible, forwardTo, forwardMsg, sourceConversationId, forwardConversationType, forwardToTeamInfo, isOneByOneForward, isMergeForward, forwardTargets, onConfirm, onCancel }) => {
     const { t } = useTranslation()
     const { store, nim } = useStateContext()
 
@@ -90,7 +98,13 @@ const MessageForwardModal: React.FC<MessageForwardModalProps> = observer(
         onConfirm={handleConfirm}
       >
         <div className="message-forward-modal-wrapper">
-          {forwardConversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM ? (
+          {forwardTargets && forwardTargets.length > 0 ? (
+            <div className="multi-targets-wrapper">
+              {forwardTargets.map((target) => (
+                <Avatar key={target.id} account={target.id} avatar={target.avatar} size="36" />
+              ))}
+            </div>
+          ) : forwardConversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM ? (
             <div className="avatar-wrapper">
               <Avatar account={forwardToTeamInfo?.teamId || ''} avatar={forwardToTeamInfo?.avatar} size="36" />
               <div className="name">{forwardToTeamInfo?.name || ''}</div>

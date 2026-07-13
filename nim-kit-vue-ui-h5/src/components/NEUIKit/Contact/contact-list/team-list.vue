@@ -43,7 +43,7 @@ const handleClick = async (team: V2NIMTeam) => {
   await store?.uiStore.selectConversation(
     nim.V2NIMConversationIdUtil.teamConversationId(team.teamId)
   );
-  router.push(neUiKitRouterPath.chat);
+  router.push(`${neUiKitRouterPath.chat}?conversationId=${nim.V2NIMConversationIdUtil.teamConversationId(team.teamId)}`);
 };
 
 /** 群列表监听 */

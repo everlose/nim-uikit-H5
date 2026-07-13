@@ -103,6 +103,12 @@ const router = createRouter({
       component: () => import("../views/user/MyDetailEditPage.vue"),
     },
     {
+      // 性别编辑页面路由
+      path: neUiKitRouterPath.myDetailGenderEdit,
+      name: "MyDetailGenderEdit",
+      component: () => import("../views/user/MyDetailGenderEditPage.vue"),
+    },
+    {
       // 关于网易云信页面路由
       path: neUiKitRouterPath.aboutNetease,
       name: "AboutNetease",

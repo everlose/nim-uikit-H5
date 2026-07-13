@@ -1,6 +1,6 @@
 <template>
   <div class="wrapper">
-    <NavBar :title="t('PersonalPageText')" />
+    <NavBar :title="t('PersonalPageText')" backgroundColor="transparent" />
     <div class="userInfo-item-wrapper">
       <div class="userInfo-item" @click="triggerFileInput">
         <div class="item-left">{{ t("avatarText") }}</div>
@@ -55,7 +55,7 @@
         </div>
       </div>
       <div class="box-shadow"></div>
-      <div class="userInfo-item">
+      <div class="userInfo-item" @click="() => router.push({ path: neUiKitRouterPath.myDetailGenderEdit })">
         <div class="item-left">{{ t("genderText") }}</div>
         <div class="item-right">
           <view class="uni-input">
@@ -67,25 +67,43 @@
                 : t("woman")
             }}</view
           >
+          <Icon
+            :size="15"
+            color="#A6ADB6"
+            iconClassName="arrow"
+            type="icon-jiantou"
+          ></Icon>
         </div>
       </div>
 
       <div class="box-shadow"></div>
-      <picker mode="date" :value="myUserInfo && myUserInfo.birthday">
-        <div class="userInfo-item">
-          <div class="item-left">{{ t("birthText") }}</div>
-          <div class="item-right">
-            <view class="uni-input">{{
-              (myUserInfo && myUserInfo.birthday) || t("unknow")
-            }}</view>
-          </div>
+      <div class="userInfo-item birthday-row" @click="triggerDatePicker">
+        <div class="item-left">{{ t("birthText") }}</div>
+        <div class="item-right">
+          <view class="uni-input">{{
+            (myUserInfo && myUserInfo.birthday) || t("unknow")
+          }}</view>
+          <Icon
+            :size="15"
+            color="#A6ADB6"
+            iconClassName="arrow"
+            type="icon-jiantou"
+          ></Icon>
         </div>
-      </picker>
+        <input
+          type="date"
+          ref="dateInputRef"
+          class="hidden-date-input"
+          @change="handleBirthdayChange"
+          @click="(e) => console.log('[birthday] input onClick', e)"
+          @focus="() => console.log('[birthday] input onFocus')"
+        />
+      </div>
       <div class="box-shadow"></div>
       <div class="userInfo-item" @click="() => navigatorToUserItem('mobile')">
         <div class="item-left">{{ t("mobile") }}</div>
         <div class="item-right">
-          {{ (myUserInfo && myUserInfo.mobile) || t("unknow")
+          {{ (myUserInfo && myUserInfo.mobile) || ""
           }}<Icon
             :size="15"
             color="#A6ADB6"
@@ -99,7 +117,7 @@
         <div class="item-left">{{ t("email") }}</div>
         <div class="item-right">
           <div class="email">
-            {{ (myUserInfo && myUserInfo.email) || t("unknow") }}
+            {{ (myUserInfo && myUserInfo.email) || "" }}
           </div>
           <Icon
             :size="15"
@@ -113,7 +131,7 @@
     <div class="signature" @click="() => navigatorToUserItem('sign')">
       <div class="signature-key">{{ t("sign") }}</div>
       <div class="signature-text">
-        {{ (myUserInfo && myUserInfo.sign) || t("unknow") }}
+        {{ (myUserInfo && myUserInfo.sign) || "" }}
       </div>
       <Icon
         :size="15"
@@ -123,6 +141,7 @@
       >
       </Icon>
     </div>
+
   </div>
 </template>
 
@@ -161,6 +180,7 @@ const navigatorToUserItem = (key: string) => {
 };
 
 const fileInput = ref<HTMLInputElement | null>(null);
+const dateInputRef = ref<HTMLInputElement | null>(null);
 
 // 触发文件选择
 const triggerFileInput = () => {
@@ -224,6 +244,35 @@ const copyAccount = () => {
   }
 };
 
+// 触发生日日期选择器
+const triggerDatePicker = () => {
+  console.log('[birthday] triggerDatePicker called, dateInputRef:', dateInputRef.value)
+  if (dateInputRef.value) {
+    dateInputRef.value.focus()
+    try {
+      // @ts-ignore - showPicker 是较新的 API
+      dateInputRef.value.showPicker?.()
+    } catch {}
+    dateInputRef.value.click()
+  }
+}
+
+// 生日选择处理
+const handleBirthdayChange = async (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const birthday = target.value
+  console.log('[birthday] handleBirthdayChange, value:', birthday)
+  if (!birthday || !myUserInfo.value) return
+  try {
+    await store?.userStore.updateSelfUserProfileActive({ ...myUserInfo.value, birthday })
+  } catch {
+    showToast({
+      message: `${t("saveText")}${t("failText")}`,
+      type: "info",
+    })
+  }
+}
+
 onUnmounted(() => {
   uninstallMyUserInfoWatch();
 });
@@ -234,24 +283,29 @@ onUnmounted(() => {
 .wrapper {
   height: 100%;
   box-sizing: border-box;
-  background-color: rgb(246, 248, 250);
+  background-color: #E9EFF5;
 }
 
 /* 用户信息项容器 */
 .userInfo-item-wrapper {
-  margin: 10px 15px;
+  margin: 16px 20px 0 20px;
   overflow: hidden;
-  border-radius: 5px;
+  border-radius: 12px;
 }
 
 /* 用户信息项 */
 .userInfo-item {
   display: flex;
-  height: 50px;
+  height: 46px;
   align-items: center;
   justify-content: space-between;
-  padding: 0 10px;
+  padding: 0 16px;
   background-color: #fff;
+}
+
+/* 头像行（第一项）加高 */
+.userInfo-item:first-child {
+  height: 64px;
 }
 
 /* 用户信息项左侧 */
@@ -298,8 +352,8 @@ onUnmounted(() => {
 /* 分隔线 */
 .box-shadow {
   height: 1px;
-  background: none;
-  box-shadow: 0 1px 0 rgb(233, 231, 231);
+  background: #F5F8FC;
+  margin: 0 20px 0 16px;
 }
 
 /* 签名容器 */
@@ -307,11 +361,12 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px;
-  margin: 10px 15px;
+  padding: 0 16px;
+  margin: 20px 20px;
   background-color: #fff;
-  border-radius: 5px;
+  border-radius: 12px;
   box-sizing: border-box;
+  height: 46px;
 }
 
 /* 签名标题 */
@@ -338,5 +393,20 @@ onUnmounted(() => {
   flex: 0 0 10px;
   color: #a6adb6;
   font-size: 15px;
+}
+
+/* 生日行需要相对定位以容纳浮层日期 input */
+.birthday-row {
+  position: relative;
+}
+
+/* 隐藏的日期选择器：覆盖整行，透明度极低但浏览器仍视其为可交互 */
+.hidden-date-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0.01;
 }
 </style>

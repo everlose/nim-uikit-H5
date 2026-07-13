@@ -1,6 +1,6 @@
 <template>
   <div class="wrapper">
-    <NavBar :title="t('FriendPageText')" />
+    <NavBar />
     <UserCard
       :account="userInfo && userInfo.accountId"
       :nick="userInfo && userInfo.name"
@@ -21,53 +21,39 @@
       </div>
     </template>
     <template v-else>
-      <div class="userInfo-item-wrapper">
+      <div class="userInfo-item-wrapper remark-wrapper">
+        <div class="item-divider" />
         <div class="userInfo-item" @click="handleAliasClick">
           <div class="item-left">{{ t("remarkText") }}</div>
-          <div class="item-right">
-            <span class="item-right-alias">{{ alias }}</span>
-            <span class="item-right">
-              <Icon
-                iconClassName="more-icon"
-                color="#999"
-                type="icon-jiantou"
-              />
-            </span>
-          </div>
+          <Icon
+            iconClassName="more-icon"
+            color="#999"
+            type="icon-jiantou"
+          />
         </div>
-        <div class="userInfo-item">
-          <div class="item-left">{{ t("genderText") }}</div>
-          <div class="item-right">
-            {{
-              userInfo && userInfo.gender === 0
-                ? t("unknow")
-                : userInfo && userInfo.gender === 1
-                ? t("man")
-                : t("woman")
-            }}
-          </div>
-        </div>
-        <div class="box-shadow"></div>
+      </div>
+      <div class="userInfo-item-wrapper">
         <div class="userInfo-item">
           <div class="item-left">{{ t("birthText") }}</div>
           <div class="item-right">
             {{ (userInfo && userInfo.birthday) || t("unknow") }}
           </div>
         </div>
-        <div class="box-shadow"></div>
+        <div class="item-divider" />
         <div class="userInfo-item">
           <div class="item-left">{{ t("mobile") }}</div>
           <div class="item-right">
             {{ (userInfo && userInfo.mobile) || t("unknow") }}
           </div>
         </div>
-        <div class="box-shadow"></div>
+        <div class="item-divider" />
         <div class="userInfo-item">
           <div class="item-left">{{ t("email") }}</div>
           <div class="item-right">
             {{ (userInfo && userInfo.email) || t("unknow") }}
           </div>
         </div>
+        <div class="item-divider" />
         <div class="userInfo-item">
           <div class="item-left">{{ t("sign") }}</div>
           <div class="item-right">
@@ -82,7 +68,7 @@
         </div>
       </div>
       <div class="button" @click="gotoChat">{{ t("chatWithFriendText") }}</div>
-      <div class="box-shadow"></div>
+      <div class="item-divider" />
       <div class="button button-red" @click="deleteFriend">
         {{ t("deleteFriendText") }}
       </div>
@@ -92,9 +78,9 @@
 
 <script lang="ts" setup>
 import UserCard from "../../CommonComponents/UserCard.vue";
+import NavBar from "../../CommonComponents/NavBar.vue";
 import { onUnmounted, ref, getCurrentInstance, onMounted } from "vue";
 import { t } from "../../utils/i18n";
-import NavBar from "../../CommonComponents/NavBar.vue";
 import { autorun } from "mobx";
 import type { Relation } from "@xkit-yx/im-store-v2";
 import type { V2NIMUser } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMUserService";
@@ -110,8 +96,6 @@ const router = useRouter();
 const { proxy } = getCurrentInstance()!; // 获取组件实例
 const store = proxy?.$UIKitStore;
 const nim = proxy?.$NIM;
-const alias = ref<string>();
-
 const userInfo = ref<V2NIMUser>();
 const relation = ref<Relation>("stranger");
 const isInBlacklist = ref(false);
@@ -193,15 +177,13 @@ const gotoChat = async () => {
     userInfo.value?.accountId || ""
   );
   await store?.uiStore.selectConversation(conversationId);
-  router.push(neUiKitRouterPath.chat);
+  router.push(`${neUiKitRouterPath.chat}?conversationId=${conversationId}`);
 };
 
 onMounted(() => {
   account = (router.currentRoute.value.query.accountId as string) || "";
 
-  store?.userStore.getUserForceActive(account).then((res) => {
-    userInfo.value = res;
-  });
+  store?.userStore.getUserListFromCloudActive([account]);
   uninstallFriendWatch = autorun(() => {
     userInfo.value = store?.uiStore.getFriendWithUserNameCard(account);
   });
@@ -216,9 +198,6 @@ onMounted(() => {
     isInBlacklist.value = _isInBlacklist;
   });
 
-  const friend = store?.friendStore.friends.get(account);
-
-  alias.value = friend ? friend.alias : "";
 });
 
 onUnmounted(() => {
@@ -238,7 +217,11 @@ onUnmounted(() => {
 
 .userInfo-item-wrapper {
   background-color: #fff;
-  margin: 10px 0;
+  margin-bottom: 10px;
+}
+
+.remark-wrapper {
+  margin-top: 0;
 }
 
 .userInfo-item {
@@ -247,6 +230,11 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 0 25px;
+}
+
+.item-divider {
+  margin: 0 25px;
+  border-top: 1px solid #f5f5f5;
 }
 
 .item-left {
@@ -279,14 +267,9 @@ onUnmounted(() => {
   color: #e6605c;
 }
 
-.box-shadow {
-  height: 1px;
-  background: none;
-  padding: 0 25px;
-  box-shadow: 0 0.5px 0 rgb(247, 244, 244);
+.bold-divider {
+  height: 8px;
+  background-color: rgb(245, 246, 247);
 }
 
-.item-right-alias {
-  margin-right: 5px;
-}
 </style>

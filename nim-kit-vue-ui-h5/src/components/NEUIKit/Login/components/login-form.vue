@@ -246,6 +246,7 @@ async function submitLoginForm() {
   color: #999999;
   border-right: 1px solid #999999;
   padding: 0 5px;
+  margin-right: 5px;
 }
 
 .sms-addon-after {

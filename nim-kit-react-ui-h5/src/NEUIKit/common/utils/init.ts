@@ -6,7 +6,7 @@ import type { LocalOptions } from "@xkit-yx/im-store-v2/dist/types/src/types";
 
 export const defaultLocalOptions: LocalOptions = {
   // 添加好友是否需要验证
-  addFriendNeedVerify: false,
+  addFriendNeedVerify: true,
   // 是否需要显示 p2p 消息、p2p会话列表消息已读未读，默认 false
   p2pMsgReceiptVisible: true,
   // 是否需要显示群组消息已读未读，默认 false

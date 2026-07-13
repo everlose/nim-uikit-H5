@@ -7,8 +7,12 @@ import PreviewText from '@/NEUIKit/common/components/PreviewText'
 import MessageText from '@/NEUIKit/chat/message/message-text'
 import MessageAudio from '@/NEUIKit/chat/message/message-audio'
 import MessageFile from '@/NEUIKit/chat/message/message-file'
+import MergedForwardModal from '@/NEUIKit/chat/message/merged-forward/modal'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
+import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
+import { showToast } from '@/NEUIKit/common/utils/toast'
 import { getImageAttachmentSize, getImageRenderStyle, getImageThumbUrl } from '@/NEUIKit/common/utils/image'
+import { normalizeMergedForwardText, parseMergedForwardPayload } from '@/NEUIKit/chat/message/merged-forward/utils'
 
 interface PinMessagePreviewProps {
   msg: V2NIMMessageForUI
@@ -16,7 +20,10 @@ interface PinMessagePreviewProps {
 
 const PinMessagePreview: React.FC<PinMessagePreviewProps> = observer(({ msg }) => {
   const { t } = useTranslation()
+  const { store } = useStateContext()
   const [isPreviewVisible, setIsPreviewVisible] = useState(false)
+  const [mergedMsgs, setMergedMsgs] = useState<V2NIMMessageForUI[]>([])
+  const [mergedVisible, setMergedVisible] = useState(false)
 
   const imageUrl = useMemo(() => {
     if (!msg.attachment) return ''
@@ -100,6 +107,53 @@ const PinMessagePreview: React.FC<PinMessagePreviewProps> = observer(({ msg }) =
       <div className="pin-message-preview-file">
         <MessageFile msg={msg} />
       </div>
+    )
+  }
+
+  const mergedPayload = parseMergedForwardPayload(msg)
+  if (mergedPayload) {
+    const data = mergedPayload.data
+    const sessionName = data?.sessionName || data?.sessionId || ''
+    const title = `${sessionName}${t('messageOfText')}`
+
+    const handleOpenMergedForward = async () => {
+      if (mergedMsgs.length) {
+        setMergedVisible(true)
+        return
+      }
+      try {
+        if (!data?.url) throw new Error('url missing')
+        const res = await fetch(data.url)
+        if (!res.ok) throw new Error('fetch failed')
+        const text = await res.text()
+        const list = store.msgStore.deserializeMergeMsgs(normalizeMergedForwardText(text)) as V2NIMMessageForUI[]
+        if (!list.length) throw new Error('deserialize failed')
+        setMergedMsgs(list)
+        setMergedVisible(true)
+      } catch {
+        showToast({
+          message: t('getMergedForwardFailedText'),
+          type: 'error',
+          duration: 1000
+        })
+      }
+    }
+
+    return (
+      <>
+        <div className="pin-message-preview-merged-card" onClick={handleOpenMergedForward}>
+          <div className="pin-merged-forward-title">{title}</div>
+          <div className="pin-merged-forward-abstracts">
+            {(data?.abstracts || []).map((item, index) => (
+              <div key={index}>
+                <span className="pin-merged-forward-sender">{item.senderNick}: </span>
+                <span>{item.content}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <MergedForwardModal visible={mergedVisible} title={title} msgs={mergedMsgs} onClose={() => setMergedVisible(false)} />
+      </>
     )
   }
 

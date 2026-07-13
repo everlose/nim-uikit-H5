@@ -28,6 +28,8 @@
 <script lang="ts" setup>
 import { ref, onUnmounted, computed, onMounted } from "vue";
 import Icon from "../../CommonComponents/Icon.vue";
+import emitter from "../../utils/eventBus";
+import { events } from "../../utils/constants";
 import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import type { V2NIMMessageAudioAttachment } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
 
@@ -79,10 +81,14 @@ const togglePlay = () => {
   if (!audioRef.value) return;
 
   if (isAudioPlaying.value) {
+    // 暂停并用 load() 强制重置音频元素
     audioRef.value.pause();
-    audioRef.value.currentTime = 0;
+    audioRef.value.load();
+    animationFlag.value = false;
     isAudioPlaying.value = false;
   } else {
+    // 每次播放都从头开始（暂停时已用 load 重置过）
+    emitter.emit(events.AUDIO_PLAY_CHANGE, props.msg.messageClientId);
     audioRef.value.play().catch((error) => {
       console.warn("播放音频失败:", error);
     });
@@ -133,12 +139,47 @@ const playAudioAnimation = () => {
   }
 };
 
-// 组件卸载时停止播放
-onUnmounted(() => {
+// 监听其他音频的播放事件，实现互斥播放：同一时间只能有一条语音在播放
+const handleAudioPlayChange = (messageId: any) => {
+  if (messageId !== props.msg.messageClientId && isAudioPlaying.value) {
+    if (audioRef.value) {
+      audioRef.value.pause();
+      audioRef.value.load();
+      isAudioPlaying.value = false;
+      animationFlag.value = false;
+    }
+  }
+};
+
+// 停止播放的通用方法
+const stopAudio = () => {
   if (audioRef.value) {
     audioRef.value.pause();
-    audioRef.value.currentTime = 0;
+    audioRef.value.load();
+    isAudioPlaying.value = false;
+    animationFlag.value = false;
   }
+};
+
+// 监听页面可见性变化（进入录制、拍照、图库等系统级页面时停止播放）
+const handleVisibilityChange = () => {
+  if (document.hidden) {
+    stopAudio();
+  }
+};
+
+onMounted(() => {
+  emitter.on(events.AUDIO_PLAY_CHANGE, handleAudioPlayChange);
+  emitter.on(events.AUDIO_STOP_ALL, stopAudio);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+});
+
+// 组件卸载时停止播放
+onUnmounted(() => {
+  emitter.off(events.AUDIO_PLAY_CHANGE, handleAudioPlayChange);
+  emitter.off(events.AUDIO_STOP_ALL, stopAudio);
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
+  stopAudio();
 });
 </script>
 

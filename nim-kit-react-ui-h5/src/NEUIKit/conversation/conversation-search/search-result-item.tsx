@@ -20,7 +20,7 @@ interface SearchResultItemProps {
 const SearchResultItem: React.FC<SearchResultItemProps> = observer(({ item }) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { store } = useStateContext()
+  const { store, nim } = useStateContext()
 
   // 是否是云端会话
   const enableV2CloudConversation = store.sdkOptions?.enableV2CloudConversation
@@ -74,7 +74,10 @@ const SearchResultItem: React.FC<SearchResultItemProps> = observer(({ item }) =>
         await store?.localConversationStore?.insertConversationActive(conversationType, receiverId)
       }
 
-      navigate(neUiKitRouterPath.chat)
+      const cId = conversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM
+        ? nim.V2NIMConversationIdUtil.teamConversationId(receiverId)
+        : nim.V2NIMConversationIdUtil.p2pConversationId(receiverId)
+      navigate(`${neUiKitRouterPath.chat}?conversationId=${cId}`)
     } catch (error) {
       toast.info(t('selectSessionFailText'))
     }

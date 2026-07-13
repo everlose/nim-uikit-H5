@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { observer } from 'mobx-react'
+import React from 'react'
+import { observer } from 'mobx-react-lite'
 import { useStateContext } from '../../hooks/useStateContext'
 import './index.less'
 
@@ -45,20 +45,16 @@ export interface AppellationProps {
 const Appellation: React.FC<AppellationProps> = observer(
   ({ account, teamId, ignoreAlias = false, nickFromMsg, color = '#000', fontSize = 16, className = '', style = {} }) => {
     const { store } = useStateContext()
-    const [appellation, setAppellation] = useState<string>('')
 
-    useEffect(() => {
-      if (store?.uiStore) {
-        // 获取用户称谓
-        const name = store.uiStore.getAppellation({
+    // 直接在 render 中计算，observer 会自动追踪 MobX 依赖并触发重渲染
+    const appellation = store?.uiStore
+      ? store.uiStore.getAppellation({
           account,
           teamId,
           ignoreAlias,
           nickFromMsg
         })
-        setAppellation(name)
-      }
-    }, [account, teamId, ignoreAlias, nickFromMsg, store?.uiStore])
+      : ''
 
     return (
       <span

@@ -9,14 +9,14 @@
         <span class="merged-forward-title-suffix">{{ t("messageOfText") }}</span>
       </div>
       <div class="merged-forward-abstracts">
-        <div
+        <span
           v-for="(item, index) in data?.abstracts || []"
           :key="`${item.userAccId}-${index}`"
-          class="merged-forward-abstract"
         >
           <span class="merged-forward-sender">{{ item.senderNick }}: </span>
-          <span class="merged-forward-content">{{ item.content }}</span>
-        </div>
+          <span>{{ item.content }}</span>
+          <br v-if="index < (data?.abstracts || []).length - 1" />
+        </span>
       </div>
       <div class="merged-forward-footer">{{ t("chatHistoryText") }}</div>
     </div>
@@ -90,7 +90,8 @@ const openMergedForward = async () => {
 
 <style scoped>
 .merged-forward-card {
-  max-width: 63vw;
+  width: 63vw;
+  max-width: none;
   overflow: hidden;
   padding: 8px;
   background-color: #c9def4;
@@ -135,28 +136,24 @@ const openMergedForward = async () => {
   flex: 0 0 auto;
 }
 
-.merged-forward-abstract {
-  display: flex;
-  align-items: center;
-  min-width: 0;
+.merged-forward-abstracts {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   color: #656a72;
   font-size: 13px;
   line-height: 18px;
-  white-space: nowrap;
-  overflow: hidden;
 }
 
 .merged-forward-sender {
-  min-width: 0;
+  display: inline-block;
+  max-width: 60%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: bottom;
   color: #3d4149;
-}
-
-.merged-forward-content {
-  flex: 0 0 auto;
-  white-space: nowrap;
 }
 
 .merged-forward-footer {

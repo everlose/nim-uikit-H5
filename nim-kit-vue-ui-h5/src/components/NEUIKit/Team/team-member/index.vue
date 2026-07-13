@@ -74,10 +74,12 @@ import { useRouter } from "vue-router";
 import { showModal } from "../../utils/modal";
 import { showToast } from "../../utils/toast";
 import { neUiKitRouterPath } from "../../utils/uikitRouter";
+import { useTeamNotification } from "../../composables/useTeamNotification";
 const router = useRouter();
 
 const { proxy } = getCurrentInstance()!; // 获取组件实例
 const store = proxy?.$UIKitStore;
+useTeamNotification(() => teamId);
 const teamMembers = ref<V2NIMTeamMember[]>([]);
 const team = ref<V2NIMTeam>();
 let teamId = "";

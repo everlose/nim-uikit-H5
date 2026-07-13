@@ -15,6 +15,7 @@ export const neUiKitRouterPath = {
   collection: "/user/collection", // 收藏页面
   myDetail: "/user/my-detail", // 我的详情页面
   myDetailEdit: "/user/my-detail-edit", // 我的详情编辑页面
+  myDetailGenderEdit: "/user/my-detail-gender-edit", // 性别编辑页面
   aboutNetease: "/user/aboutNetease", // 关于网易云信页面
   addFriend: "/friend/add", // 添加好友页面
   friendCard: "/friend/friend-card", // 好友名片页面

@@ -75,7 +75,7 @@ onUnmounted(() => {
   color: #b3b7bc;
   font-size: 14px;
   padding: 10px 20px;
-  text-align: center;
+  text-align: left;
 }
 
 .black-list-content {

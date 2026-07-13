@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useRef, useEffect } from 'react'
 import { observer } from 'mobx-react-lite'
 import dayjs from 'dayjs'
 import Avatar from '@/NEUIKit/common/components/Avatar'
@@ -8,7 +8,7 @@ import Icon from '@/NEUIKit/common/components/Icon'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
-import type { V2NIMConversationForUI, V2NIMLocalConversationForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
+import type { V2NIMConversationForUI, V2NIMLocalConversationForUI, V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
 import ConversationItemRead from './conversation-item-read'
 import LastMsgContent from './conversation-item-last-msg-content'
 import './conversation-item.less'
@@ -30,9 +30,16 @@ const ConversationItem: React.FC<ConversationItemProps> = observer(
     const { t } = useTranslation()
     const { store } = useStateContext()
 
-    // 触摸相关状态
-    const [startX, setStartX] = useState(0)
-    const [startY, setStartY] = useState(0)
+    // 滑动阈值 & 触摸相关 refs
+    const SWIPE_THRESHOLD = 60
+    const containerRef = useRef<HTMLDivElement>(null)
+    const startXRef = useRef(0)
+    const startYRef = useRef(0)
+    const swipeTriggeredRef = useRef(false)
+    const onLeftSlideRef = useRef(onLeftSlide)
+    onLeftSlideRef.current = onLeftSlide
+    const conversationRef = useRef(conversation)
+    conversationRef.current = conversation
 
     // 更多操作按钮
     const moreActions = [
@@ -80,7 +87,13 @@ const ConversationItem: React.FC<ConversationItemProps> = observer(
       const isCurrentDay = _d.isSame(dayjs(), 'day')
       const isCurrentYear = _d.isSame(dayjs(), 'year')
 
-      return _d.format(isCurrentDay ? 'HH:mm' : isCurrentYear ? 'MM-DD HH:mm' : 'YYYY-MM-DD HH:mm')
+      if (isCurrentDay) {
+        return _d.format('HH:mm')
+      }
+      if (isCurrentYear) {
+        return _d.format(t('timeFormatSameYear'))
+      }
+      return _d.format(t('timeFormatDiffYear'))
     }
 
     // 未读数量显示格式化
@@ -91,32 +104,37 @@ const ConversationItem: React.FC<ConversationItemProps> = observer(
     const isMute = !!conversation.mute
 
     // 是否有@消息
-    // 1. 优先检查 aitMsgs（SDK维护的@消息列表）
-    // 2. 如果 aitMsgs 为空但有未读消息，则检查最后一条消息的 serverExtension（用于免打扰状态下的补充检测）
-    // 3. 消息已读后（unreadCount 为 0 且 aitMsgs 为空），不再显示@提示
+    // 1. 没有未读消息时，不显示@提示
+    // 2. 如果 aitMsgs 有值，从本地内存查找这些消息，对比 createTime 与 lastReadTime 判断是否真正未读
+    // 3. 如果本地内存中找不到（如页面刷新），fallback 到 lastMessage.serverExtension 检测
     const beMentioned = (() => {
-      // 如果 aitMsgs 有值，直接使用（SDK会在消息已读后清空）
-      if (conversation.aitMsgs?.length) {
-        return true
-      }
-      
-      // 如果没有未读消息，不显示@提示
       if (conversation.unreadCount === 0) {
         return false
       }
-      
-      // 有未读消息时，检查最后一条消息是否@了当前用户（用于免打扰状态下的补充检测）
+
+      if (conversation.aitMsgs?.length) {
+        // 从本地内存查找这些@消息
+        const aitMessages = store.msgStore?.getMsg(conversation.conversationId, conversation.aitMsgs)
+        if (aitMessages && aitMessages.length > 0) {
+          // 找到了@消息，检查是否有消息时间 > 已读时间（即真正未读的@消息）
+          const lastReadTime = (conversation as V2NIMConversationForUI).lastReadTime ?? 0
+          return aitMessages.some((msg: V2NIMMessageForUI) => msg.createTime > lastReadTime)
+        }
+        // 本地内存中没找到消息（如页面刷新后消息未加载），fallback 到 lastMessage 检测
+      }
+
+      // fallback: 检查最后一条消息的 serverExtension 是否@了当前用户
       const lastMsg = conversation.lastMessage
       if (!lastMsg?.serverExtension) {
         return false
       }
-      
+
       try {
         const ext = JSON.parse(lastMsg.serverExtension)
         if (!ext?.yxAitMsg) {
           return false
         }
-        
+
         const myAccountId = store.nim.V2NIMLoginService.getLoginUser()
         // 检查是否@了当前用户或@了所有人
         return myAccountId in ext.yxAitMsg || 'ait_all' in ext.yxAitMsg
@@ -142,27 +160,43 @@ const ConversationItem: React.FC<ConversationItemProps> = observer(
       return false
     })()
 
-    // 处理触摸开始
-    const handleTouchStart = (event: React.TouchEvent) => {
-      setStartX(event.changedTouches[0].pageX)
-      setStartY(event.changedTouches[0].pageY)
-    }
+    // 原生 touch 事件监听，使用 { passive: false } 以支持 preventDefault
+    useEffect(() => {
+      const el = containerRef.current
+      if (!el) return
 
-    // 处理触摸移动
-    const handleTouchMove = (event: React.TouchEvent) => {
-      const moveEndX = event.changedTouches[0].pageX
-      const moveEndY = event.changedTouches[0].pageY
-      const X = moveEndX - startX + 20
-      const Y = moveEndY - startY
-
-      if (Math.abs(X) > Math.abs(Y) && X > 0) {
-        // 右滑，收起操作栏
-        onLeftSlide?.(null)
-      } else if (Math.abs(X) > Math.abs(Y) && X < 0) {
-        // 左滑，展示操作栏
-        onLeftSlide?.(conversation)
+      const handleTouchStart = (e: TouchEvent) => {
+        startXRef.current = e.changedTouches[0].pageX
+        startYRef.current = e.changedTouches[0].pageY
+        swipeTriggeredRef.current = false
       }
-    }
+
+      const handleTouchMove = (e: TouchEvent) => {
+        if (swipeTriggeredRef.current) {
+          e.preventDefault()
+          return
+        }
+        const diffX = e.changedTouches[0].pageX - startXRef.current
+        const diffY = e.changedTouches[0].pageY - startYRef.current
+
+        if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > SWIPE_THRESHOLD) {
+          swipeTriggeredRef.current = true
+          e.preventDefault()
+          if (diffX < 0) {
+            onLeftSlideRef.current?.(conversationRef.current)
+          } else {
+            onLeftSlideRef.current?.(null)
+          }
+        }
+      }
+
+      el.addEventListener('touchstart', handleTouchStart, { passive: true })
+      el.addEventListener('touchmove', handleTouchMove, { passive: false })
+      return () => {
+        el.removeEventListener('touchstart', handleTouchStart)
+        el.removeEventListener('touchmove', handleTouchMove)
+      }
+    }, [])
 
     // 处理会话项点击
     const handleConversationItemClick = () => {
@@ -180,7 +214,7 @@ const ConversationItem: React.FC<ConversationItemProps> = observer(
       .join(' ')
 
     return (
-      <div className={containerClassName} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onClick={handleConversationItemClick}>
+      <div className={containerClassName} ref={containerRef} onClick={handleConversationItemClick}>
         <div className="conversation-item-content">
           <div className="conversation-item-left">
             {unread && <div className="unread">{isMute ? <div className="dot"></div> : <div className="badge">{unread}</div>}</div>}
@@ -205,7 +239,7 @@ const ConversationItem: React.FC<ConversationItemProps> = observer(
               <span className="conversation-item-desc-span">
                 {beMentioned && <span className="beMentioned">{`[${t('someoneText')}@${t('meText')}]`}</span>}
 
-                {showSessionUnread && <ConversationItemRead conversation={conversation} />}
+                {/* {showSessionUnread && <ConversationItemRead conversation={conversation} />} */}
 
                 {conversation.lastMessage && (
                   <span className="conversation-item-desc-content">

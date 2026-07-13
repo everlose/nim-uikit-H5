@@ -8,6 +8,7 @@ import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { showModal } from '@/NEUIKit/common/utils/modal'
 import { showToast } from '@/NEUIKit/common/utils/toast'
 import { neUiKitRouterPath } from '@/NEUIKit/common/utils/uikitRouter'
+import { useTeamNotification } from '@/NEUIKit/common/hooks/useTeamNotification'
 
 import NavBar from '@/NEUIKit/common/components/NavBar'
 import Avatar from '@/NEUIKit/common/components/Avatar'
@@ -28,6 +29,7 @@ const TeamMember: React.FC = observer(() => {
   // 从 URL 查询参数获取群 ID
   const params = new URLSearchParams(location.search)
   const teamId = params.get('teamId') || ''
+  useTeamNotification(teamId)
 
   // 对群成员进行排序，群主在前，管理员在后，其他成员按加入时间排序
   const sortTeamMembers = (members: V2NIMTeamMember[]) => {

@@ -11,14 +11,6 @@
       <div v-else class="main">{{ nick || account }}</div>
       <div class="deputy">
         {{ t("accountText") }}:{{ props.account }}
-        <div @click="copyAccount">
-          <Icon
-            class="copy-icon"
-            type="icon-fuzhi1"
-            color="#A6ADB6"
-            :size="20"
-          ></Icon>
-        </div>
       </div>
     </div>
   </div>
@@ -26,12 +18,9 @@
 
 <script lang="ts" setup>
 import Avatar from "./Avatar.vue";
-import Icon from "./Icon.vue";
-import { onUnmounted, ref, onMounted, getCurrentInstance, watch } from "vue";
+import { onUnmounted, ref, getCurrentInstance, watch } from "vue";
 import { autorun } from "mobx";
 import { t } from "../utils/i18n";
-import { showToast } from "../utils/toast";
-import { copyText } from "../utils";
 const props = withDefaults(
   defineProps<{
     account?: string;
@@ -49,45 +38,26 @@ let uninstallFriendsWatch = () => {};
 const { proxy } = getCurrentInstance()!; // 获取组件实例
 const store = proxy?.$UIKitStore;
 
-onMounted(() => {
-  const account = props.account;
-
-  uninstallFriendsWatch = autorun(() => {
-    const friend = { ...store?.friendStore.friends.get(account) };
-
-    alias.value = friend ? friend.alias : "";
-  });
-});
-
 watch(
   () => props.account,
-  (newVal, _) => {
-    const friend = { ...store?.friendStore.friends.get(newVal) };
-    alias.value = friend ? friend.alias : "";
-  }
+  (newAccount, _oldAccount, onCleanup) => {
+    uninstallFriendsWatch();
+    if (!newAccount) {
+      alias.value = "";
+      return;
+    }
+    uninstallFriendsWatch = autorun(() => {
+      const friend = store?.friendStore.friends.get(newAccount);
+      alias.value = friend?.alias || "";
+    });
+    onCleanup(() => uninstallFriendsWatch());
+  },
+  { immediate: true }
 );
 
 onUnmounted(() => {
   uninstallFriendsWatch();
 });
-
-const copyAccount = (e) => {
-  e.stopPropagation();
-  try {
-    copyText(props.account);
-    showToast({
-      message: t("copySuccessText"),
-      type: "info",
-      duration: 2000,
-    });
-  } catch (error) {
-    showToast({
-      message: t("copyFailText"),
-      type: "info",
-      duration: 2000,
-    });
-  }
-};
 </script>
 
 <style scoped>
@@ -127,10 +97,6 @@ const copyAccount = (e) => {
   font-size: 14px;
   display: flex;
   align-items: center;
-}
-
-/* 复制图标 */
-.copy-icon {
-  margin-left: 2px;
+  color: #333;
 }
 </style>

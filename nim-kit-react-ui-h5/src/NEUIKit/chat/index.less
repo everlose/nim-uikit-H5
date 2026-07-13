@@ -17,11 +17,37 @@
   }
 
   .msg-alert {
-    display: flex;
-    flex-direction: column;
+    position: relative;
+    height: 0;         /* 始终不占 flex 空间，避免 NetworkAlert 出现时消息跳动 */
     width: 100%;
-    height: auto;
-    z-index: 1;
+    z-index: 10;
+
+    > div {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+    }
+  }
+
+  .security-tip {
+    padding: 6px 16px;
+    background: #fff5e1;
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 13px;
+    line-height: 150%;
+    color: #eb9718;
+  }
+
+  .security-tip-icon {
+    vertical-align: text-top;
+    margin-right: 4px;
+  }
+
+  .security-tip-report {
+    color: #3370ff;
+    cursor: pointer;
   }
 
   .msg-wrapper {
@@ -52,7 +78,7 @@
   .msg-anchor-latest {
     position: fixed;
     right: 18px;
-    bottom: 86px;
+    bottom: 110px;
     width: 36px;
     height: 36px;
     border-radius: 18px;
@@ -61,7 +87,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 20;
+    z-index: 1;
     transform: rotate(90deg);
   }
 

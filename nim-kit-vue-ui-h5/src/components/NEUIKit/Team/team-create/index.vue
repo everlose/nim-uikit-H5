@@ -1,9 +1,15 @@
 <template>
   <div class="create-team-container">
-    <NavBar :title="t('createTeamText')">
+    <NavBar :title="t('createTeamText')" showLeft>
+      <template v-slot:left>
+        <div class="nav-cancel-btn" @click="router.back()">{{ t('cancelText') }}</div>
+      </template>
       <template v-slot:right>
-        <div @click="createTeam">
-          {{ t("okText") }}
+        <div
+          :class="['create-team-button', { disabled: teamMembers.length === 0 }]"
+          @click="teamMembers.length > 0 && createTeam()"
+        >
+          {{ teamMembers.length > 0 ? `${t('yesText')}(${teamMembers.length})` : t('yesText') }}
         </div>
       </template>
     </NavBar>
@@ -11,8 +17,10 @@
       <PersonSelect
         :personList="friendList"
         @checkboxChange="checkboxChange"
+        @maxExceeded="toast.info(t('maxSelectedText'))"
         :radio="false"
         :showBtn="false"
+        :max="200"
       >
       </PersonSelect>
     </div>
@@ -60,16 +68,16 @@ onMounted(() => {
 });
 
 const checkboxChange = (selectList) => {
+  if (selectList.length > 200) {
+    toast.info(t("maxSelectedText"));
+    return;
+  }
   friendList.value = friendList.value.map((item) => {
     return {
       accountId: item.accountId,
       checked: selectList.includes(item.accountId),
     };
   });
-  if (selectList.length >= 200) {
-    toast.info(t("maxSelectedText"));
-    return;
-  }
 };
 
 const createTeamName = (teamMembers: string[]) => {
@@ -130,7 +138,7 @@ const createTeam = async () => {
       store?.uiStore.selectConversation(
         nim.V2NIMConversationIdUtil.teamConversationId(teamId)
       );
-      router.push(neUiKitRouterPath.chat);
+      router.push(`${neUiKitRouterPath.chat}?conversationId=${nim.V2NIMConversationIdUtil.teamConversationId(teamId)}`);
     }
 
     toast.info(t("createTeamSuccessText"));
@@ -149,9 +157,14 @@ const createTeam = async () => {
   overflow: auto;
   background-color: #fff;
 }
-.create-team-content {
-  height: calc(100% - 60px);
+
+.create-team-container :deep(.nav-bar-container) {
+  background-color: #FFF;
+  border-bottom: 1px solid #e6e6e6;
 }
+/* .create-team-content {
+  height: calc(100% - 60px);
+} */
 .select-wrapper {
   flex: 1;
 }
@@ -189,5 +202,22 @@ const createTeam = async () => {
 
 .placeholder {
   color: #a6adb6;
+}
+
+.create-team-button {
+  color: #337eff;
+  font-size: 16px;
+  cursor: pointer;
+
+  &.disabled {
+    color: #b3cff7;
+    cursor: not-allowed;
+  }
+}
+
+.nav-cancel-btn {
+  font-size: 16px;
+  color: #333;
+  cursor: pointer;
 }
 </style>

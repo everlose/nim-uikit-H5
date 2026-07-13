@@ -105,6 +105,13 @@
         />
       </div>
     </div>
+    <MergedForwardModal
+      v-if="mergedForwardVisible"
+      :visible="mergedForwardVisible"
+      :title="props.replyMsg?.text || ''"
+      :msgs="mergedForwardMsgs"
+      @close="mergedForwardVisible = false"
+    />
   </div>
 </template>
 
@@ -120,6 +127,9 @@ import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import MessageAudio from "./message-audio.vue";
 import Icon from "../../CommonComponents/Icon.vue";
 import PreviewImage from "../../CommonComponents/PreviewImage.vue";
+import MergedForwardModal from "./merged-forward/modal.vue";
+import { parseMergedForwardPayload, normalizeMergedForwardText } from "./merged-forward/utils";
+import { showToast } from "../../utils/toast";
 
 const props = withDefaults(defineProps<{ replyMsg: V2NIMMessageForUI }>(), {});
 const { proxy } = getCurrentInstance()!; // 获取组件实例
@@ -129,6 +139,8 @@ const isFullScreen = ref(false);
 const repliedTo = ref("");
 
 const isPreviewImgVisible = ref(false);
+const mergedForwardVisible = ref(false);
+const mergedForwardMsgs = ref<V2NIMMessageForUI[]>([]);
 
 //@ts-ignore
 const { name = "", url = "" } = props.replyMsg?.attachment || {};
@@ -158,6 +170,34 @@ const repliedToWatch = autorun(() => {
   }) as string;
 });
 
+// 打开合并转发消息
+const openMergedForward = async () => {
+  if (mergedForwardMsgs.value.length) {
+    mergedForwardVisible.value = true;
+    return;
+  }
+  try {
+    const payload = parseMergedForwardPayload(props.replyMsg);
+    const url = payload?.data?.url;
+    if (!url) throw new Error("Merged forward url missing");
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Merged forward fetch failed");
+    const text = await res.text();
+    const list = proxy?.$UIKitStore.msgStore.deserializeMergeMsgs(
+      normalizeMergedForwardText(text)
+    ) as V2NIMMessageForUI[];
+    if (!list.length) throw new Error("Merged forward deserialize failed");
+    mergedForwardMsgs.value = list;
+    mergedForwardVisible.value = true;
+  } catch {
+    showToast({
+      message: t("getMergedForwardFailedText"),
+      type: "error",
+      duration: 1000,
+    });
+  }
+};
+
 // 全屏展示被回复的消息
 const showFullReplyMsg = () => {
   if (
@@ -185,6 +225,11 @@ const showFullReplyMsg = () => {
     V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO
   ) {
     isFullScreen.value = true;
+  } else if (
+    props.replyMsg?.messageType ===
+    V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM
+  ) {
+    openMergedForward();
   }
 };
 
@@ -214,6 +259,7 @@ onUnmounted(() => {
   font-size: 13px;
   white-space: nowrap;
   width: 100%;
+  margin-bottom: 4px;
 }
 
 .reply-msg-wrapper .reply-msg {

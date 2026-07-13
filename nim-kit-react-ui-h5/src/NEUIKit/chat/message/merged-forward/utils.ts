@@ -150,10 +150,17 @@ export const sendMergedForwardMessage = async ({
   chatHistoryText: string
   comment?: string
 }) => {
+  // 合并转发消息中发送者昵称应使用用户真实昵称，而非备注名
+  // 临时覆盖 getAppellation 以避免 serializeMergeMsgs 内部取到备注
+  const originalGetAppellation = store.uiStore.getAppellation.bind(store.uiStore)
+  store.uiStore.getAppellation = (options: { account: string; teamId?: string; ignoreAlias?: boolean }) => {
+    return store.userStore.users.get(options.account)?.name || options.account
+  }
   const { content, depth } = store.msgStore.serializeMergeMsgs(msgs as unknown as V2NIMMessage[], {
     appVersion,
     sdkVersion: (nim as any).version || ''
   })
+  store.uiStore.getAppellation = originalGetAppellation
   const mergedMsgsFile = new File([content], 'mergedMsgs.txt', { type: 'text/plain' })
   const url = await store.storageStore.uploadFileActive(mergedMsgsFile)
   const md5 = await getFileMd5(mergedMsgsFile)
@@ -171,16 +178,22 @@ export const sendMergedForwardMessage = async ({
   }
   const customMsg = nim.V2NIMMessageCreator.createCustomMessage(`[${chatHistoryText}]`, JSON.stringify(payload))
 
-  await store.msgStore.sendMessageActive({
-    msg: customMsg as unknown as V2NIMMessage,
-    conversationId
-  })
+  const promises: Promise<any>[] = [
+    store.msgStore.sendMessageActive({
+      msg: customMsg as unknown as V2NIMMessage,
+      conversationId
+    })
+  ]
 
   if (comment) {
     const textMsg = nim.V2NIMMessageCreator.createTextMessage(comment)
-    await store.msgStore.sendMessageActive({
-      msg: textMsg as unknown as V2NIMMessage,
-      conversationId
-    })
+    promises.push(
+      store.msgStore.sendMessageActive({
+        msg: textMsg as unknown as V2NIMMessage,
+        conversationId
+      })
+    )
   }
+
+  await Promise.all(promises)
 }

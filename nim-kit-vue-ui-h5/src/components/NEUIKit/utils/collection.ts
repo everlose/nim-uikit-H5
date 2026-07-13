@@ -6,13 +6,7 @@ import type {
   V2NIMMessage,
 } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
 
-export const MESSAGE_COLLECTION_TYPE = 1;
 export const COLLECTION_LIMIT_ERROR_CODE = 189301;
-
-export interface MessageCollectionPayload {
-  version: 1;
-  message: V2NIMMessageForUI;
-}
 
 export interface MessageCollectionItem {
   collection: V2NIMCollection;
@@ -79,65 +73,72 @@ export const getMessageCollectionConverter = (
 
 export const createMessageCollectionParams = (
   msg: V2NIMMessageForUI,
-  converter: MessageCollectionConverter
+  converter: MessageCollectionConverter,
+  extra?: {
+    conversationName?: string
+    senderName?: string
+    avatar?: string
+  }
 ): V2NIMAddCollectionParams => {
-  const collectionData = converter.messageSerialization(msg);
-  if (!collectionData) {
+  const serializedMsg = converter.messageSerialization(msg);
+  if (!serializedMsg) {
     throw new Error("Message serialization failed");
   }
 
   return {
-    collectionType: MESSAGE_COLLECTION_TYPE,
-    collectionData,
+    collectionType: msg.messageType + 1000,
+    collectionData: JSON.stringify({
+      message: serializedMsg,
+      conversationName: extra?.conversationName || '',
+      senderName: extra?.senderName || '',
+      avatar: extra?.avatar || '',
+    }),
     uniqueId: getCollectionUniqueId(msg),
   };
+};
+
+const isValidMessage = (msg: unknown): msg is V2NIMMessageForUI => {
+  const m = msg as V2NIMMessageForUI | null | undefined;
+  return !!(m?.messageClientId && m.conversationId && typeof m.messageType === 'number');
+};
+
+const tryParseAppFormat = (collectionData: string, converter?: MessageCollectionConverter | null): V2NIMMessage | null => {
+  try {
+    const payload = JSON.parse(collectionData || "{}");
+    const rawMsg = payload?.message;
+    if (!rawMsg) return null;
+
+    const msg = typeof rawMsg === 'string'
+      ? converter?.messageDeserialization(rawMsg)
+      : rawMsg;
+
+    return isValidMessage(msg) ? msg : null;
+  } catch {
+    return null;
+  }
+};
+
+const tryParseH5Format = (collectionData: string, converter?: MessageCollectionConverter | null): V2NIMMessage | null => {
+  const msg = converter?.messageDeserialization(collectionData || "");
+  return isValidMessage(msg) ? msg : null;
 };
 
 export const parseMessageCollection = (
   collection: V2NIMCollection,
   converter?: MessageCollectionConverter | null
 ): MessageCollectionItem | null => {
-  if (collection.collectionType !== MESSAGE_COLLECTION_TYPE) {
-    return null;
-  }
+  // Try App format first — collectionData is {"message": "<serialized>", "conversationName": ..., "senderName": ..., "avatar": ...}
+  const msg = tryParseAppFormat(collection.collectionData || "", converter)
+    || tryParseH5Format(collection.collectionData || "", converter);
 
-  const serializedMsg = converter?.messageDeserialization(
-    collection.collectionData || ""
-  );
-  if (
-    serializedMsg?.messageClientId &&
-    serializedMsg.conversationId &&
-    typeof serializedMsg.messageType === "number"
-  ) {
-    return {
-      collection,
-      msg: serializedMsg as V2NIMMessageForUI,
-      collectionTime:
-        collection.createTime || collection.updateTime || serializedMsg.createTime || 0,
-    };
-  }
+  if (!msg) return null;
 
-  try {
-    const payload = JSON.parse(
-      collection.collectionData || "{}"
-    ) as Partial<MessageCollectionPayload>;
-    const msg = payload.message;
-    if (
-      !msg?.messageClientId ||
-      !msg.conversationId ||
-      typeof msg.messageType !== "number"
-    ) {
-      return null;
-    }
-
-    return {
-      collection,
-      msg,
-      collectionTime: collection.createTime || collection.updateTime || msg.createTime || 0,
-    };
-  } catch {
-    return null;
-  }
+  return {
+    collection,
+    msg,
+    collectionTime:
+      collection.createTime || collection.updateTime || msg.createTime || 0,
+  };
 };
 
 export const normalizeMessageCollections = (

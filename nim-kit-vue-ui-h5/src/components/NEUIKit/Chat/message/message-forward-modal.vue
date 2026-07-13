@@ -8,7 +8,19 @@
     @confirm="handleConfirm"
   >
     <div
-      v-if="
+      v-if="forwardTargets && forwardTargets.length > 0"
+      class="multi-targets-wrapper"
+    >
+      <Avatar
+        v-for="target in forwardTargets"
+        :key="target.id"
+        :account="target.id"
+        :avatar="target.avatar"
+        size="36"
+      />
+    </div>
+    <div
+      v-else-if="
         props.forwardConversationType ===
         V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM
       "
@@ -53,6 +65,13 @@ import Avatar from "../../CommonComponents/Avatar.vue";
 import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import Input from "../../CommonComponents/Input.vue";
+interface ForwardTargetInfo {
+  id: string;
+  type: number;
+  name: string;
+  avatar?: string;
+}
+
 interface ForwardToTeamInfo {
   teamId: string;
   name: string;
@@ -69,6 +88,7 @@ const props = withDefaults(
     forwardToTeamInfo?: ForwardToTeamInfo;
     isOneByOneForward?: boolean;
     forwardMode?: "normal" | "oneByOne" | "merged";
+    forwardTargets?: ForwardTargetInfo[];
   }>(),
   {
     sourceConversationId: "",
@@ -165,6 +185,15 @@ const forwardSourceName = computed(() => {
   border-radius: 4px;
   padding: 5px 8px;
   box-sizing: border-box;
+}
+
+/* 多目标头像容器 */
+.multi-targets-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0px 10px;
+  flex-wrap: wrap;
 }
 
 /* 头像容器 */

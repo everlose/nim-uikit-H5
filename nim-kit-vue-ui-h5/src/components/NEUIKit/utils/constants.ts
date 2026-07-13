@@ -55,9 +55,13 @@ export const events: { [key: string]: string } = {
   CLOSE_PANEL: "closePanel",
   // 语音消息url改变
   AUDIO_URL_CHANGE: "audioUrlChange",
+  // 语音消息播放状态变化（用于互斥播放）
+  AUDIO_PLAY_CHANGE: "audioPlayChange",
+  // 停止所有语音播放
+  AUDIO_STOP_ALL: "audioStopAll",
 };
 
-export const HISTORY_LIMIT = 15;
+export const HISTORY_LIMIT = 20;
 
 export const MSG_ID_FLAG = "message-item-";
 
@@ -70,6 +74,7 @@ export const REPLY_MSG_TYPE_MAP: { [key: number]: string } = {
   [V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO]: t("audioMsgText"),
   [V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_VIDEO]: t("videoMsgText"),
   [V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_FILE]: t("fileMsgText"),
+  [V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM]: t("chatHistoryText"),
 };
 
 export const STORAGE_KEY = "__yx_im_options__h5";

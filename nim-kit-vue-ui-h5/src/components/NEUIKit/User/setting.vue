@@ -1,6 +1,6 @@
 <template>
   <div class="wrapper">
-    <NavBar :title="t('setText')" />
+    <NavBar :title="t('setText')" backgroundColor="transparent" />
     <div class="setting-item-wrapper">
       <div class="setting-item">
         <div class="item-left">{{ t("enableV2CloudConversationText") }}</div>
@@ -71,9 +71,13 @@ const handleLogout = () => {
     content: t("logoutConfirmText"),
     title: t("tipText"),
     onCancel: () => {},
-    onConfirm: () => {
+    onConfirm: async () => {
       localStorage.removeItem("__yx_im_options__h5");
-      store?.destroy();
+      const nim = proxy?.$NIM;
+      if (nim) {
+        await nim.V2NIMLoginService.logout();
+      }
+      store?.resetState();
       router.push(neUiKitRouterPath.login);
     },
   });
@@ -82,44 +86,51 @@ const handleLogout = () => {
 
 <style scoped>
 .wrapper {
-  background-color: rgb(245, 246, 247);
+  background-color: #E9EFF5;
   width: 100%;
   min-height: 100vh;
   box-sizing: border-box;
 }
 
 .setting-item-wrapper {
-  margin: 12px;
+  margin: 16px 20px 0 20px;
   background: #fff;
-  border-radius: 8px;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .setting-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
+  padding: 0 16px;
+  height: 46px;
   color: #000;
+  position: relative;
+}
+
+.setting-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 16px;
+  right: 20px;
+  height: 1px;
+  background-color: #F5F8FC;
 }
 
 .item-left {
   font-size: 16px;
 }
 
-.box-shadow {
-  height: 1px;
-  background-color: #ebedf0;
-  margin: 0 16px;
-}
-
 .logout-btn {
-  margin: 12px;
+  margin: 16px 20px 0 20px;
   background-color: #fff;
-  border-radius: 8px;
-  height: 48px;
-  line-height: 48px;
+  border-radius: 12px;
+  height: 46px;
+  line-height: 46px;
   text-align: center;
-  color: #f56c6c;
+  color: #F24957;
   font-size: 16px;
 }
 </style>

@@ -1,5 +1,6 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
+import { t } from '../../utils/i18n'
 import './index.less'
 
 export interface ModalProps {
@@ -42,7 +43,9 @@ export interface ModalProps {
 /**
  * 模态对话框组件
  */
-const Modal: React.FC<ModalProps> = ({ title, confirmText = '确定', cancelText = '取消', visible, onConfirm, onCancel, showFooter = true, children }) => {
+const Modal: React.FC<ModalProps> = ({ title, confirmText, cancelText, visible, onConfirm, onCancel, showFooter = true, children }) => {
+  const _confirmText = confirmText ?? t('yesText')
+  const _cancelText = cancelText !== undefined ? cancelText : t('cancelText')
   // 如果不可见，则不渲染
   if (!visible) {
     return null
@@ -78,11 +81,13 @@ const Modal: React.FC<ModalProps> = ({ title, confirmText = '确定', cancelText
         </div>
         {showFooter && (
           <div className="nim-buttons">
-            <div className="nim-button nim-cancel" onClick={handleCancelClick}>
-              {cancelText}
-            </div>
+            {_cancelText && (
+              <div className="nim-button nim-cancel" onClick={handleCancelClick}>
+                {_cancelText}
+              </div>
+            )}
             <div className="nim-button nim-confirm" onClick={handleConfirmClick}>
-              {confirmText}
+              {_confirmText}
             </div>
           </div>
         )}

@@ -105,6 +105,7 @@ import { useRouter } from "vue-router";
 import Button from "../../CommonComponents/Button.vue";
 import { toast } from "../../utils/toast";
 import { loading } from "../../utils/loading";
+import { useTeamNotification } from "../../composables/useTeamNotification";
 
 const router = useRouter();
 const { proxy } = getCurrentInstance()!;
@@ -120,6 +121,7 @@ const avatarArr = [
   "https://yx-web-nosdn.netease.im/common/fd6c75bb6abca9c810d1292e66d5d87e/groupAvatar5.png",
 ];
 let teamId = "";
+useTeamNotification(() => teamId);
 
 const setAvatar = (index: number) => {
   avatar.value = avatarArr[index];

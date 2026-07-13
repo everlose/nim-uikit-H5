@@ -1,11 +1,11 @@
 <template>
   <div
     v-if="visible && msg"
-    class="collection-preview-mask collection-text-preview-mask"
+    class="text-preview-mask"
     @click="handleClose"
   >
-    <div class="collection-text-preview" @click.stop>
-      <div class="collection-text-preview-content">
+    <div class="text-preview-body" @click.stop>
+      <div class="text-preview-content">
         <MessageText :msg="msg" />
       </div>
     </div>
@@ -41,24 +41,23 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.collection-preview-mask {
+.text-preview-mask {
   position: fixed;
   z-index: 9999;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   box-sizing: border-box;
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.9);
-}
-
-.collection-text-preview-mask {
   background: #eef3f7;
 }
 
-.collection-text-preview {
+.text-preview-body {
   position: relative;
   width: 100%;
   max-width: calc(100vw - 48px);
@@ -67,7 +66,7 @@ onUnmounted(() => {
   box-sizing: border-box;
 }
 
-.collection-text-preview-content {
+.text-preview-content {
   color: #333;
   font-size: 28px;
   line-height: 38px;
@@ -75,7 +74,7 @@ onUnmounted(() => {
   word-break: break-word;
 }
 
-.collection-text-preview-content :deep(.msg-text) {
+.text-preview-content :deep(.msg-text) {
   text-align: center;
 }
 </style>

@@ -85,7 +85,6 @@ import IconA70 from "../static/icons/icon-a-70.png";
 import IconAFrame7 from "../static/icons/icon-a-Frame7.png";
 import IconAFrame8 from "../static/icons/icon-a-Frame8.png";
 import IconAddition from "../static/icons/icon-addition.png";
-import IconBiaoqing from "../static/icons/icon-biaoqing.png";
 import IconChehui from "../static/icons/icon-chehui.png";
 import IconChuangjianqunzu from "../static/icons/icon-chuangjianqunzu.png";
 import IconComputed from "../static/icons/icon-computed.png";
@@ -102,7 +101,8 @@ import IconJiaruqunzu from "../static/icons/icon-jiaruqunzu.png";
 import IconKefu from "../static/icons/icon-kefu.png";
 import IconLahei from "../static/icons/icon-lahei.png";
 import IconLishixiaoxi from "../static/icons/icon-lishixiaoxi.png";
-import IconMore from "../static/icons/icon-More.png";
+import IconAdd from "../static/icons/icon-Add.svg";
+import IconMore from "../static/icons/icon-More.svg";
 import IconPPT from "../static/icons/icon-PPT.png";
 import IconQita from "../static/icons/icon-qita.png";
 import IconQuxiaoxiaoximiandarao from "../static/icons/icon-quxiaoxiaoximiandarao.png";
@@ -135,7 +135,6 @@ import IconWeidu from "../static/icons/icon-weidu.png";
 import IconTupian2 from "../static/icons/icon-tupian2.png";
 import IconTupian1 from "../static/icons/icon-tupian1.png";
 import IconTupian from "../static/icons/icon-tupian.png";
-import IconTuigejian from "../static/icons/icon-tuigejian.png";
 import IconTuichudenglu from "../static/icons/icon-tuichudenglu.png";
 import IconTouxiang5 from "../static/icons/icon-touxiang5.png";
 import IconTouxiang4 from "../static/icons/icon-touxiang4.png";
@@ -155,7 +154,6 @@ import IconYuyin8 from "../static/icons/icon-yuyin8.png";
 import IconAudio from "../static/audio1.png";
 import IconAudioBtn from "../static/Vector.png";
 import IconAudioBtnSelected from "../static/Frame.png";
-import IconSendMore from "../static/send-more.png";
 import IconPaishe from "../static/paishe.png";
 import IconShipin2 from "../static/icons/icon-shipin2.png";
 import IconAudioCall from "../static/icons/icon-audio-call.png";
@@ -169,6 +167,12 @@ import IconCollection from "../static/icons/add-collection.png";
 import IconBlueCollection from "../static/icons/collection.png";
 import IconVoiceToText from "../static/icons/icon-voice-to-text.png";
 import IconMultiSelect from "../static/icons/icon-multi-select.svg";
+import IconEmojiNormal from "../static/icons/icon-emoji-normal.svg";
+import IconEmojiActive from "../static/icons/icon-emoji-active.svg";
+import IconMoreNormal from "../static/icons/icon-more-normal.svg";
+import IconMoreActive from "../static/icons/icon-more-active.svg";
+import IconDeleteLight from "../static/icons/icon-delete-light.png";
+import IconSelectBlue from "../static/icons/icon-select-blue.svg";
 const props = withDefaults(
   defineProps<{
     type: string;
@@ -255,7 +259,6 @@ const urlMap = {
   "icon-a-Frame7": IconAFrame7,
   "icon-a-Frame8": IconAFrame8,
   "icon-addition": IconAddition,
-  "icon-biaoqing": IconBiaoqing,
   "icon-chehui": IconChehui,
   "icon-chuangjianqunzu": IconChuangjianqunzu,
   "icon-computed": IconComputed,
@@ -272,6 +275,7 @@ const urlMap = {
   "icon-kefu": IconKefu,
   "icon-lahei": IconLahei,
   "icon-lishixiaoxi": IconLishixiaoxi,
+  "icon-add": IconAdd,
   "icon-More": IconMore,
   "icon-PPT": IconPPT,
   "icon-qita": IconQita,
@@ -305,7 +309,6 @@ const urlMap = {
   "icon-tupian2": IconTupian2,
   "icon-tupian1": IconTupian1,
   "icon-tupian": IconTupian,
-  "icon-tuigejian": IconTuigejian,
   "icon-tuichudenglu": IconTuichudenglu,
   "icon-touxiang5": IconTouxiang5,
   "icon-touxiang4": IconTouxiang4,
@@ -325,7 +328,6 @@ const urlMap = {
   "icon-audio": IconAudio,
   "audio-btn": IconAudioBtn,
   "audio-btn-selected": IconAudioBtnSelected,
-  "send-more": IconSendMore,
   "icon-paishe": IconPaishe,
   "icon-shipin2": IconShipin2,
   "icon-audio-call": IconAudioCall,
@@ -339,6 +341,12 @@ const urlMap = {
   "blue-collection": IconBlueCollection,
   "icon-voice-to-text": IconVoiceToText,
   "icon-multi-select": IconMultiSelect,
+  "icon-emoji-normal": IconEmojiNormal,
+  "icon-emoji-active": IconEmojiActive,
+  "icon-more-normal": IconMoreNormal,
+  "icon-more-active": IconMoreActive,
+  "icon-delete-light": IconDeleteLight,
+  "icon-select-blue": IconSelectBlue,
 };
 
 //以上链接访问有频率控制，建议您将静态放到您服务器上，然后修改上面的链接即可

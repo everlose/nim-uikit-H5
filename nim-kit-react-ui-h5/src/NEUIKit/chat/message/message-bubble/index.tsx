@@ -202,12 +202,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = observer(({ msg, tooltipVisi
   const handleResendMsg = async () => {
     store.msgStore.removeMsg(msg.conversationId, [msg.messageClientId])
 
+    // 恢复回复消息状态，确保重发失败回复消息时保持回复关系
+    const threadReply = (msg as any).threadReply
+    if (threadReply) {
+      store.msgStore.replyMsgActive(threadReply)
+    }
+
     try {
       switch (msg.messageType) {
         case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_IMAGE:
         case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_VIDEO:
         case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_FILE:
-          store.msgStore.sendMessageActive({
+          await store.msgStore.sendMessageActive({
             msg: msg,
             conversationId: msg.conversationId,
             progress: () => true,
@@ -217,7 +223,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = observer(({ msg, tooltipVisi
           })
           break
         case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT:
-          store.msgStore.sendMessageActive({
+          await store.msgStore.sendMessageActive({
             msg: msg,
             conversationId: msg.conversationId,
             sendBefore: () => {
@@ -226,7 +232,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = observer(({ msg, tooltipVisi
           })
           break
         default:
-          store.msgStore.sendMessageActive({
+          await store.msgStore.sendMessageActive({
             msg: msg,
             conversationId: msg.conversationId,
             sendBefore: () => {
@@ -235,9 +241,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = observer(({ msg, tooltipVisi
           })
           break
       }
-      scrollBottom()
     } catch (error) {
-      // console.log(error)
+      toast.info(t('resendMsgFailText'))
+    } finally {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => scrollBottom())
+      })
     }
   }
 
@@ -287,7 +296,19 @@ const MessageBubble: React.FC<MessageBubbleProps> = observer(({ msg, tooltipVisi
     try {
       const converter = getMessageCollectionConverter(nim)
       if (!converter) throw new Error('V2NIMMessageConverter unavailable')
-      await store.msgStore.addCollectionActive(createMessageCollectionParams(msg, converter))
+
+      const conversationType = nim.V2NIMConversationIdUtil.parseConversationType(msg.conversationId)
+      const isTeamMessage = conversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM
+      const teamId = isTeamMessage ? nim.V2NIMConversationIdUtil.parseConversationTargetId(msg.conversationId) : undefined
+      const conversation = store.sdkOptions?.enableV2CloudConversation
+        ? store.conversationStore?.conversations.get(msg.conversationId)
+        : store.localConversationStore?.conversations.get(msg.conversationId)
+
+      await store.msgStore.addCollectionActive(createMessageCollectionParams(msg, converter, {
+        conversationName: conversation?.name,
+        senderName: store.uiStore.getAppellation({ account: msg.senderId, teamId }),
+        avatar: store.userStore.users.get(msg.senderId)?.avatar,
+      }))
       toast.info(t('addCollectionSuccessText'))
     } catch (error) {
       toast.info(isCollectionLimitError(error) ? t('collectionLimitText') : t('addCollectionFailedText'))
@@ -349,6 +370,19 @@ const MessageBubble: React.FC<MessageBubbleProps> = observer(({ msg, tooltipVisi
 
   // 添加好友
   const addFriend = () => {
+    // 移除 URL 中的 anchorMessageClientId，防止从好友页返回后仍锚点到标记消息
+    const hashQuery = window.location.hash.split('?')[1] || ''
+    const params = new URLSearchParams(hashQuery)
+    if (params.get('anchorMessageClientId')) {
+      const convId = params.get('conversationId')
+      if (convId) {
+        window.history.replaceState(
+          window.history.state,
+          '',
+          `#${neUiKitRouterPath.chat}?conversationId=${convId}`
+        )
+      }
+    }
     navigate(`${neUiKitRouterPath.friendCard}?accountId=${msg.receiverId}`)
   }
 
@@ -463,6 +497,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = observer(({ msg, tooltipVisi
             </div>
           )}
 
+        {(canOperatePin(msg) || isMergedForwardMsg(store, msg)) && (
+          <div className="msg-action-btn" onClick={handlePinMsg}>
+            <Icon size={18} style={{ color: '#656A72' }} iconClassName="msg-action-btn-icon" type="icon-pin" />
+            <span className="msg-action-btn-text">{pinned ? t('unpinText') : t('pinText')}</span>
+          </div>
+        )}
+
         <div className="msg-action-btn" onClick={handleDeleteMsg}>
           <Icon size={18} style={{ color: '#656A72' }} iconClassName="msg-action-btn-icon" type="icon-shanchu" />
           <span className="msg-action-btn-text">{t('deleteText')}</span>
@@ -488,14 +529,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = observer(({ msg, tooltipVisi
           </div>
         )}
 
-        {canOperatePin(msg) && (
-          <div className="msg-action-btn" onClick={handlePinMsg}>
-            <Icon size={18} style={{ color: '#656A72' }} iconClassName="msg-action-btn-icon" type="icon-pin" />
-            <span className="msg-action-btn-text">{pinned ? t('unpinText') : t('pinText')}</span>
-          </div>
-        )}
-
-        {canCollectMessage(msg) && (
+        {(canCollectMessage(msg) || isMergedForwardMsg(store, msg)) && (
           <div className="msg-action-btn" onClick={handleCollectMsg}>
             <Icon size={18} style={{ color: '#656A72' }} iconClassName="msg-action-btn-icon" type="icon-collection" />
             <span className="msg-action-btn-text">{t('collectionText')}</span>
@@ -516,7 +550,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = observer(({ msg, tooltipVisi
           color="white"
           align={msg.isSelf}
           content={
-            <div className="msg-action-groups" style={getActionGroupStyle(msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT ? 2 : 1)}>
+            <div className="msg-action-groups" style={getActionGroupStyle(msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT ? 3 : 2)}>
               {msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT && (
                 <div className="msg-action-btn" onClick={handleCopy}>
                   <Icon size={18} style={{ color: '#656A72' }} iconClassName="msg-action-btn-icon" type="icon-fuzhi1" />
@@ -526,6 +560,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = observer(({ msg, tooltipVisi
               <div className="msg-action-btn" onClick={handleDeleteMsg}>
                 <Icon size={18} style={{ color: '#656A72' }} iconClassName="msg-action-btn-icon" type="icon-shanchu" />
                 <span className="msg-action-btn-text">{t('deleteText')}</span>
+              </div>
+              <div className="msg-action-btn" onClick={handleMultiSelect}>
+                <Icon size={18} style={{ color: '#656A72' }} iconClassName="msg-action-btn-icon" type="icon-multi-select" />
+                <span className="msg-action-btn-text">{t('multiSelectText')}</span>
               </div>
             </div>
           }
@@ -551,7 +589,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = observer(({ msg, tooltipVisi
             content={
               <div
                 className="msg-action-groups"
-                style={getActionGroupStyle(msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT ? 2 : 1)}
+                style={getActionGroupStyle(msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT ? 3 : 2)}
               >
                 {msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT && (
                   <div className="msg-action-btn" onClick={handleCopy}>
@@ -562,6 +600,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = observer(({ msg, tooltipVisi
                 <div className="msg-action-btn" onClick={handleDeleteMsg}>
                   <Icon size={18} style={{ color: '#656A72' }} iconClassName="msg-action-btn-icon" type="icon-shanchu" />
                   <span className="msg-action-btn-text">{t('deleteText')}</span>
+                </div>
+                <div className="msg-action-btn" onClick={handleMultiSelect}>
+                  <Icon size={18} style={{ color: '#656A72' }} iconClassName="msg-action-btn-icon" type="icon-multi-select" />
+                  <span className="msg-action-btn-text">{t('multiSelectText')}</span>
                 </div>
               </div>
             }
@@ -587,7 +629,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = observer(({ msg, tooltipVisi
   if (!msg.isSelf) {
     return (
       <>
-        {readonly || isMultiSelecting ? (
+        {readonly || isMultiSelecting || msg.recallType ? (
           readonly ? renderReadonlyBubble('msg-bg-in') : renderBubbleContent('msg-bg-in')
         ) : (
           <Tooltip
@@ -616,7 +658,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = observer(({ msg, tooltipVisi
   }
 
   // 正常发送成功的消息
-  if (tooltipVisible) {
+  if (tooltipVisible && !msg.recallType) {
     return (
       <>
         {readonly || isMultiSelecting ? (

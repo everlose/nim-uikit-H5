@@ -6,7 +6,6 @@ import i18n from '../i18n/zh-CN'
 import { getLoginSmsCode, loginRegisterByCode } from '../utils/api'
 import { toast } from '@/NEUIKit/common/utils/toast'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
-import { init } from '@/NEUIKit/common/utils/init'
 import { neUiKitRouterPath } from '@/NEUIKit/common/utils/uikitRouter'
 
 import './LoginForm.less'
@@ -16,7 +15,7 @@ import './LoginForm.less'
  */
 const LoginForm: React.FC = () => {
   const navigate = useNavigate()
-  const { store } = useStateContext()
+  const { nim } = useStateContext()
 
   // 短信倒计时
   const [smsCount, setSmsCount] = useState(60)
@@ -126,16 +125,8 @@ const LoginForm: React.FC = () => {
         })
       )
 
-      // 初始化 SDK
-      const { nim } = init()
-
-      // 执行 IM 登录
-      nim.V2NIMLoginService.login(res.imAccid, res.imToken, {
-        // 强制模式设置为 true, 多端登录冲突时会挤掉其他端而让本端登上
-        forceMode: true,
-        // 演示为静态登录模式-固定账号密码
-        authType: 0
-      }).then(() => {
+      // 执行 IM 登录（使用 Provider 中的 nim 实例，避免创建重复实例）
+      nim.V2NIMLoginService.login(res.imAccid, res.imToken).then(() => {
         // IM 登录成功后跳转到会话页面
         navigate(neUiKitRouterPath.conversation)
       })

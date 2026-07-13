@@ -1,5 +1,6 @@
 import { createVNode, render } from 'vue';
 import Modal from '../CommonComponents/Modal.vue';
+import { t } from './i18n';
 
 let container: HTMLDivElement | null = null;
 
@@ -22,8 +23,8 @@ export const showModal = (options: ModalOptions) => {
   const {
     title,
     content,
-    confirmText = '确定',
-    cancelText = '取消',
+    confirmText = t('yesText'),
+    cancelText = t('cancelText'),
     onConfirm,
     onCancel
   } = options;

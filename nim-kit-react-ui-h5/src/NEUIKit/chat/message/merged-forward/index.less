@@ -1,4 +1,6 @@
 .merged-forward-card {
+  width: 63vw;
+  max-width: none;
   padding: 8px;
   background-color: #c9def4;
 }
@@ -29,30 +31,24 @@
   flex: 0 0 auto;
 }
 
-// .merged-forward-abstracts {
-// }
-
-.merged-forward-abstract {
-  display: flex;
-  align-items: center;
-  min-width: 0;
+.merged-forward-abstracts {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
   overflow: hidden;
   color: #656a72;
   font-size: 13px;
   line-height: 18px;
-  white-space: nowrap;
 }
 
 .merged-forward-sender {
-  min-width: 0;
+  display: inline-block;
+  max-width: 60%;
   overflow: hidden;
-  color: #3d4149;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.merged-forward-abstract-content {
-  flex: 0 0 auto;
+  vertical-align: bottom;
+  color: #3d4149;
 }
 
 .merged-forward-footer {
@@ -66,4 +62,13 @@
 
 .merged-forward-viewer-content {
   padding: 18px 0;
+
+  .msg-time {
+    margin-top: 12px;
+  }
+
+  .msg-item-wrapper {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
 }

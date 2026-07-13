@@ -16,14 +16,14 @@
         <div class="team-set-item-flex" @click="handleTitleClick">
           <div class="team-set-item-team-name">{{ t("teamTitle") }}</div>
           <div class="team-set-item-right">
-            <span class="team-set-item-name">{{ team.name }}</span>
+            <!-- <span class="team-set-item-name">{{ team.name }}</span> -->
             <Icon iconClassName="more-icon" color="#999" type="icon-jiantou" />
           </div>
         </div>
         <div class="team-set-item-flex" @click="handleIntroClick">
           <div class="team-set-item-team-intro">{{ t("teamIntro") }}</div>
           <div class="team-set-item-right">
-            <span class="team-set-item-name">{{ team.intro }}</span>
+            <!-- <span class="team-set-item-name">{{ team.intro }}</span> -->
             <Icon iconClassName="more-icon" color="#999" type="icon-jiantou" />
           </div>
         </div>
@@ -50,6 +50,7 @@ import type {
 } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import RootStore from "@xkit-yx/im-store-v2";
 import { neUiKitRouterPath } from "../../utils/uikitRouter";
+import { useTeamNotification } from "../../composables/useTeamNotification";
 
 const router = useRouter();
 let teamId = "";
@@ -63,6 +64,8 @@ const { proxy } = getCurrentInstance()!;
 const store = proxy?.$UIKitStore as RootStore;
 const nim = proxy?.$NIM;
 /**是否是云端会话 */
+
+useTeamNotification(() => teamId);
 const enableV2CloudConversation = store?.sdkOptions?.enableV2CloudConversation;
 
 const handleAvatarClick = () => {
@@ -216,18 +219,6 @@ onUnmounted(() => {
   height: 50px;
   display: flex;
   align-items: center;
-}
-
-.team-set-item-name {
-  text-align: right;
-  width: 200px;
-  height: 36px;
-  line-height: 36px;
-  color: #999999;
-  display: inline-block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .member-add {

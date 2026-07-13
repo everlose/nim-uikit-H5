@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { observer } from 'mobx-react-lite'
 import Avatar from '@/NEUIKit/common/components/Avatar'
 import MessageBubble from '@/NEUIKit/chat/message/message-bubble'
@@ -94,7 +94,7 @@ const MessageItem: React.FC<MessageItemProps> = observer(({ msg, index, replyMsg
 
   const senderName = readonly ? mergedForwardSenderInfo.nick : appellation
   const senderAvatar = readonly ? mergedForwardSenderInfo.avatar : ''
-  const showSenderName = readonly || !msg.isSelf
+  const showSenderName = readonly || (!msg.isSelf && conversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM)
   const readonlyAudioText = t('audioMsgText')
   const readonlyCallText = (msg.attachment as any)?.type == 1 ? t('voiceCallText') : t('videoCallText')
   const canAitSender =
@@ -176,6 +176,30 @@ const MessageItem: React.FC<MessageItemProps> = observer(({ msg, index, replyMsg
     return getImageRenderStyle(width, height, 'chat')
   }, [msg.attachment])
 
+  // 图片/视频消息发送完成后，附件尺寸更新可能撑开滚动条，需重新滚动到底部
+  const prevSendingStateRef = useRef(msg.sendingState)
+  useEffect(() => {
+    const wasSending =
+      prevSendingStateRef.current ===
+      V2NIMConst.V2NIMMessageSendingState.V2NIM_MESSAGE_SENDING_STATE_SENDING
+    const isNowSent =
+      msg.sendingState !== V2NIMConst.V2NIMMessageSendingState.V2NIM_MESSAGE_SENDING_STATE_SENDING
+    if (
+      wasSending &&
+      isNowSent &&
+      (msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_IMAGE ||
+        msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_VIDEO)
+    ) {
+      // 双 rAF 确保 React 重渲染 + 浏览器 layout 完成后再滚动
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          emitter.emit(events.ON_SCROLL_BOTTOM)
+        })
+      })
+    }
+    prevSendingStateRef.current = msg.sendingState
+  }, [msg.sendingState, msg.messageType])
+
   // 点击图片预览
   const handleImageTouch = (url: string) => {
     if (url) {
@@ -183,13 +207,18 @@ const MessageItem: React.FC<MessageItemProps> = observer(({ msg, index, replyMsg
     }
   }
 
+  // 视频播放 overlay 状态
+  const [videoPlayerUrl, setVideoPlayerUrl] = useState('')
+  const [videoPlayerVisible, setVideoPlayerVisible] = useState(false)
+
   // 点击视频播放
   const handleVideoTouch = (msg: V2NIMMessageForUI) => {
     //@ts-ignore
     const url = msg.attachment?.url
     if (url) {
-      // 在新窗口打开视频
-      window.open(url, '_blank', 'noopener,noreferrer')
+      // 在当前页面打开视频播放 overlay，不跳转新窗口
+      setVideoPlayerUrl(url)
+      setVideoPlayerVisible(true)
     }
   }
 
@@ -201,11 +230,21 @@ const MessageItem: React.FC<MessageItemProps> = observer(({ msg, index, replyMsg
   // 消息置顶类判断
   const isPinned = isMessagePinned(msg) && !(msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM && msg.timeValue !== undefined) && !msg.recallType
   const isEnglish = locale === 'en'
-  const pinTip = isEnglish ? `${t('pinThisText')} ${pinTipName}` : `${pinTipName}${t('pinThisText')}`
+  const pinTipLabel = t('pinThisText')
   const pinTipNode = isPinned ? (
     <div className={msg.isSelf ? 'msg-pin-tip msg-pin-tip-self' : 'msg-pin-tip'}>
       <Icon type="icon-green-pin" size={12} />
-      <span className="msg-pin-tip-text">{pinTip}</span>
+      {isEnglish ? (
+        <>
+          <span className="msg-pin-tip-label">{pinTipLabel} </span>
+          <span className="msg-pin-tip-name">{pinTipName}</span>
+        </>
+      ) : (
+        <>
+          <span className="msg-pin-tip-name">{pinTipName}</span>
+          <span className="msg-pin-tip-label">{pinTipLabel}</span>
+        </>
+      )}
     </div>
   ) : null
   const selectable = isSelectableMessage(msg)
@@ -229,7 +268,13 @@ const MessageItem: React.FC<MessageItemProps> = observer(({ msg, index, replyMsg
     >
       {isMultiSelecting && selectable && !readonly && (
         <div className="msg-select-column">
-          <div className={`msg-select-box ${selected ? 'selected' : ''}`}>{selected && <span className="msg-select-check">✓</span>}</div>
+          <div className={`msg-select-box ${selected ? 'selected' : ''}`}>
+            {selected && (
+              <svg className="msg-select-check" viewBox="0 0 18 18" width="18" height="18" fill="none">
+                <path d="M5.15 8.74L8 12.5L14.24 7.18" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </div>
         </div>
       )}
       {/* 消息时间间隔提示 */}
@@ -265,9 +310,9 @@ const MessageItem: React.FC<MessageItemProps> = observer(({ msg, index, replyMsg
           {senderAvatarNode}
           <div className="msg-content">
             {showSenderName && <div className="msg-name">{senderName}</div>}
-            <div className={msg.isSelf ? 'self-msg-recall' : 'msg-recall'}>
-              <span className="msg-recall2">{!msg.isSelf ? t('recall2') : `${t('you') + t('recall')}`}</span>
-            </div>
+            <MessageBubble msg={msg} bgVisible={true} readonly={readonly} {...bubbleMultiSelectProps}>
+              <span className="recall-text">{!msg.isSelf ? t('recall2') : `${t('you') + t('recall')}`}</span>
+            </MessageBubble>
           </div>
         </div>
       ) : msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT ? (
@@ -300,7 +345,7 @@ const MessageItem: React.FC<MessageItemProps> = observer(({ msg, index, replyMsg
                       <div className="loading-spinner"></div>
                     </div>
                   ) : (
-                    <img className="msg-image" style={imageRenderStyle} loading="lazy" src={thumbnail} alt="图片" />
+                    <img className="msg-image" style={imageRenderStyle} src={thumbnail} alt="图片" />
                   )}
                 </div>
               </MessageBubble>
@@ -323,7 +368,7 @@ const MessageItem: React.FC<MessageItemProps> = observer(({ msg, index, replyMsg
                   <div className="video-play-button">
                     <div className="video-play-icon"></div>
                   </div>
-                  <img className="msg-image" style={imageRenderStyle} loading="lazy" src={videoFirstFrameDataUrl} alt="视频封面" />
+                  <img className="msg-image" style={imageRenderStyle} src={videoFirstFrameDataUrl} alt="视频封面" />
                 </div>
               </MessageBubble>
             </div>
@@ -393,6 +438,48 @@ const MessageItem: React.FC<MessageItemProps> = observer(({ msg, index, replyMsg
       ) : msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_NOTIFICATION ? (
         /* 通知消息 */
         <MessageNotification msg={msg} />
+      ) : msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION ? (
+        /* 地理位置消息 */
+        <>
+          <div className="msg-common" style={{ flexDirection: !msg.isSelf ? 'row' : 'row-reverse' }}>
+            {senderAvatarNode}
+            <div className="msg-content">
+              {showSenderName && <div className="msg-name">{senderName}</div>}
+              <MessageBubble msg={msg} tooltipVisible={true} bgVisible={true} readonly={readonly} {...bubbleMultiSelectProps}>
+                [{t('geoMsgText')}]
+              </MessageBubble>
+            </div>
+          </div>
+          {pinTipNode}
+        </>
+      ) : msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_ROBOT ? (
+        /* 机器人消息 */
+        <>
+          <div className="msg-common" style={{ flexDirection: !msg.isSelf ? 'row' : 'row-reverse' }}>
+            {senderAvatarNode}
+            <div className="msg-content">
+              {showSenderName && <div className="msg-name">{senderName}</div>}
+              <MessageBubble msg={msg} tooltipVisible={true} bgVisible={true} readonly={readonly} {...bubbleMultiSelectProps}>
+                [{t('robotMsgText')}]
+              </MessageBubble>
+            </div>
+          </div>
+          {pinTipNode}
+        </>
+      ) : msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TIPS ? (
+        /* 提示消息 */
+        <>
+          <div className="msg-common" style={{ flexDirection: !msg.isSelf ? 'row' : 'row-reverse' }}>
+            {senderAvatarNode}
+            <div className="msg-content">
+              {showSenderName && <div className="msg-name">{senderName}</div>}
+              <MessageBubble msg={msg} tooltipVisible={true} bgVisible={true} readonly={readonly} {...bubbleMultiSelectProps}>
+                [{t('tipMsgText')}]
+              </MessageBubble>
+            </div>
+          </div>
+          {pinTipNode}
+        </>
       ) : (
         /* 未知消息类型 */
         <>
@@ -407,6 +494,18 @@ const MessageItem: React.FC<MessageItemProps> = observer(({ msg, index, replyMsg
           </div>
           {pinTipNode}
         </>
+      )}
+      {videoPlayerVisible && (
+        <div className="video-player-overlay" onClick={() => setVideoPlayerVisible(false)}>
+          <button className="video-player-close" type="button" onClick={() => setVideoPlayerVisible(false)} aria-label="关闭">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+              <circle cx="14" cy="14" r="14" fill="#4C4C4C"/>
+              <line x1="9" y1="9" x2="18.5" y2="18.5" stroke="#fff" strokeWidth="2" strokeLinecap="round"/>
+              <line x1="19" y1="9" x2="9.5" y2="18.5" stroke="#fff" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </button>
+          <video src={videoPlayerUrl} controls autoPlay playsInline onClick={(e) => e.stopPropagation()} />
+        </div>
       )}
     </div>
   )

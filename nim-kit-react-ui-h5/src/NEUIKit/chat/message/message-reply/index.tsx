@@ -10,6 +10,9 @@ import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { REPLY_MSG_TYPE_MAP } from '@/NEUIKit/common/utils/constants'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
 import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
+import { parseMergedForwardPayload, normalizeMergedForwardText } from '@/NEUIKit/chat/message/merged-forward/utils'
+import { showToast } from '@/NEUIKit/common/utils/toast'
+import MergedForwardModal from '@/NEUIKit/chat/message/merged-forward/modal'
 import './index.less'
 
 interface MessageReplyProps {
@@ -26,6 +29,8 @@ const MessageReply: React.FC<MessageReplyProps> = observer(({ replyMsg }) => {
   const [isFullScreen, setIsFullScreen] = useState(false)
   const [isPreviewImgVisible, setIsPreviewImgVisible] = useState(false)
   const [repliedTo, setRepliedTo] = useState('')
+  const [mergedForwardVisible, setMergedForwardVisible] = useState(false)
+  const [mergedForwardMsgs, setMergedForwardMsgs] = useState<V2NIMMessageForUI[]>([])
 
   // 从附件中获取文件名和下载链接
   //@ts-ignore
@@ -56,6 +61,32 @@ const MessageReply: React.FC<MessageReplyProps> = observer(({ replyMsg }) => {
     setRepliedTo(nickname)
   }, [replyMsg?.receiverId, replyMsg?.senderId])
 
+  // 打开合并转发消息
+  const openMergedForward = async () => {
+    if (mergedForwardMsgs.length) {
+      setMergedForwardVisible(true)
+      return
+    }
+    try {
+      const payload = parseMergedForwardPayload(replyMsg)
+      const url = payload?.data?.url
+      if (!url) throw new Error('Merged forward url missing')
+      const res = await fetch(url)
+      if (!res.ok) throw new Error('Merged forward fetch failed')
+      const text = await res.text()
+      const list = store.msgStore.deserializeMergeMsgs(normalizeMergedForwardText(text)) as V2NIMMessageForUI[]
+      if (!list.length) throw new Error('Merged forward deserialize failed')
+      setMergedForwardMsgs(list)
+      setMergedForwardVisible(true)
+    } catch {
+      showToast({
+        message: t('getMergedForwardFailedText'),
+        type: 'error',
+        duration: 1000
+      })
+    }
+  }
+
   // 显示全屏回复消息
   const showFullReplyMsg = () => {
     if (replyMsg?.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_IMAGE) {
@@ -71,6 +102,8 @@ const MessageReply: React.FC<MessageReplyProps> = observer(({ replyMsg }) => {
       }
     } else if (replyMsg?.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO) {
       setIsFullScreen(true)
+    } else if (replyMsg?.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM) {
+      openMergedForward()
     }
   }
 
@@ -152,6 +185,15 @@ const MessageReply: React.FC<MessageReplyProps> = observer(({ replyMsg }) => {
             </div>
           ) : null}
         </div>
+      )}
+
+      {mergedForwardVisible && (
+        <MergedForwardModal
+          visible={mergedForwardVisible}
+          title={`${replyMsg?.text || ''}`}
+          msgs={mergedForwardMsgs}
+          onClose={() => setMergedForwardVisible(false)}
+        />
       )}
     </div>
   )

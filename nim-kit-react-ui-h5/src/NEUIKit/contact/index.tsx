@@ -55,6 +55,11 @@ const ContactList: React.FC = observer(() => {
     navigate(neUiKitRouterPath.teamlist)
   }
 
+  // 跳转到搜索页面
+  const goToSearchPage = () => {
+    navigate(neUiKitRouterPath.conversationSearch)
+  }
+
   // 显示下拉菜单
   const showAddDropdown = () => {
     setAddDropdownVisible(true)
@@ -75,10 +80,14 @@ const ContactList: React.FC = observer(() => {
         <div className="logo-box">
           <div>{t('contactText')}</div>
         </div>
-        <div className="button-box">
-          <div onClick={showAddDropdown}>
-            <Icon type="icon-More" size={24} />
+        <div className="right-actions">
+          <div className="button-icon-search" onClick={goToSearchPage}>
+            <Icon type="icon-sousuo" size={20} />
           </div>
+          <div className="button-box">
+            <div onClick={showAddDropdown}>
+              <Icon type="icon-add" size={20} />
+            </div>
           {addDropdownVisible && (
             <div className="dropdown-container">
               <div className="add-menu-list">
@@ -97,6 +106,7 @@ const ContactList: React.FC = observer(() => {
               </div>
             </div>
           )}
+        </div>
         </div>
       </div>
 

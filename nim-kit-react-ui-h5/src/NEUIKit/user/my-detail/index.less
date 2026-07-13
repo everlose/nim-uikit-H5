@@ -2,23 +2,28 @@
 .my-detail-wrapper {
   height: 100%;
   box-sizing: border-box;
-  background-color: rgb(246, 248, 250);
+  background-color: #E9EFF5;
 
   /* 用户信息项容器 */
   .my-detail-item-wrapper {
-    margin: 10px 15px;
+    margin: 16px 20px 0 20px;
     overflow: hidden;
-    border-radius: 5px;
+    border-radius: 12px;
   }
 
   /* 用户信息项 */
   .my-detail-item {
     display: flex;
-    height: 50px;
+    height: 46px;
     align-items: center;
     justify-content: space-between;
-    padding: 0 10px;
+    padding: 0 16px;
     background-color: #fff;
+  }
+
+  /* 头像行（第一项）加高 */
+  .my-detail-item:first-child {
+    height: 64px;
   }
 
   /* 用户信息项左侧 */
@@ -65,8 +70,8 @@
   /* 分隔线 */
   .box-shadow {
     height: 1px;
-    background: none;
-    box-shadow: 0 1px 0 rgb(233, 231, 231);
+    background: #F5F8FC;
+    margin: 0 20px 0 16px;
   }
 
   /* 签名容器 */
@@ -74,11 +79,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px;
-    margin: 10px 15px;
+    padding: 0 16px;
+    margin: 20px 20px;
     background-color: #fff;
-    border-radius: 5px;
+    border-radius: 12px;
     box-sizing: border-box;
+    height: 46px;
   }
 
   /* 签名标题 */
@@ -105,5 +111,20 @@
     flex: 0 0 10px;
     color: #a6adb6;
     font-size: 15px;
+  }
+
+  /* 生日行需要相对定位以容纳浮层日期 input */
+  .birthday-row {
+    position: relative;
+  }
+
+  /* 隐藏的日期选择器：覆盖整行，透明度极低但浏览器仍视其为可交互 */
+  .hidden-date-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    opacity: 0.01;
   }
 }

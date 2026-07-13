@@ -5,6 +5,7 @@ import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { debounce } from '@xkit-yx/utils'
 import { toast } from '@/NEUIKit/common/utils/toast'
+import { useTeamNotification } from '@/NEUIKit/common/hooks/useTeamNotification'
 
 import NavBar from '@/NEUIKit/common/components/NavBar'
 import PersonSelect from '@/NEUIKit/common/components/PersonSelect'
@@ -33,6 +34,7 @@ const TeamAdd: React.FC = observer(() => {
   const [newTeamMember, setNewTeamMember] = useState<string[]>([])
   // 群组ID
   const [teamId, setTeamId] = useState<string>('')
+  useTeamNotification(teamId)
 
   // 初始化数据
   useEffect(() => {
@@ -63,6 +65,10 @@ const TeamAdd: React.FC = observer(() => {
   // 处理选择变化
   const handleCheckboxChange = useCallback((selectList: string | string[]) => {
     if (Array.isArray(selectList)) {
+      if (selectList.length > 200) {
+        toast.info(t('maxSelectedText'))
+        return
+      }
       setNewTeamMember(selectList)
     }
   }, [])
@@ -106,14 +112,19 @@ const TeamAdd: React.FC = observer(() => {
     <div className="team-add-wrapper">
       <NavBar
         title={t('friendSelectText')}
+        showLeft
+        leftContent={<div className="nav-cancel-btn" onClick={() => navigate(-1)}>{t('cancelText')}</div>}
         rightContent={
-          <div className="add-button" onClick={addTeamMember}>
-            {t('okText')}
+          <div
+            className={`add-button${newTeamMember.length === 0 ? ' disabled' : ''}`}
+            onClick={newTeamMember.length === 0 ? undefined : addTeamMember}
+          >
+            {newTeamMember.length > 0 ? `${t('yesText')}(${newTeamMember.length})` : t('yesText')}
           </div>
         }
       />
       <div className="team-member-select">
-        <PersonSelect personList={friendList} showBtn={false} onCheckboxChange={handleCheckboxChange} />
+        <PersonSelect personList={friendList} showBtn={false} onCheckboxChange={handleCheckboxChange} max={200} onMaxExceeded={() => toast.info(t('maxSelectedText'))} />
       </div>
     </div>
   )

@@ -11,18 +11,15 @@
       </template>
     </NavBar>
     <div class="userInfo-item-wrapper">
-      <Input
-        class="input"
-        :confirm-type="t('okText')"
-        @focus="onInputFocus"
-        :maxlength="15"
-        @input="onInputChange"
+      <textarea
+        class="nick-textarea"
+        :maxlength="30"
         v-model="inputValue"
         :placeholder="t('nickInTeam')"
+        rows="3"
       />
-      <div @click="clearInputValue">
+      <div v-if="inputValue" @click="clearInputValue" class="clear-icon-wrapper">
         <Icon
-          v-show="showClearIcon"
           iconClassName="clear-icon"
           type="icon-shandiao"
         ></Icon>
@@ -41,38 +38,30 @@ import { t } from "../../utils/i18n";
 import type { V2NIMTeamMember } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMTeamService";
 import { onMounted } from "vue";
 import RootStore from "@xkit-yx/im-store-v2";
-import Input from "../../CommonComponents/Input.vue";
 import { useRouter } from "vue-router";
 import { toast } from "../../utils/toast";
+import { useTeamNotification } from "../../composables/useTeamNotification";
 
 const router = useRouter();
 const inputValue = ref("");
-const showClearIcon = ref(false);
 const myMemberInfo = ref<V2NIMTeamMember>();
 let teamId = "";
 let uninstallTeamMemberWatch = () => {};
 const { proxy } = getCurrentInstance()!;
 const store = proxy?.$UIKitStore as RootStore;
+useTeamNotification(() => teamId);
 
 onMounted(() => {
   teamId = (router.currentRoute.value.query.teamId as string) || "";
   uninstallTeamMemberWatch = autorun(() => {
-    myMemberInfo.value = store?.teamMemberStore.getTeamMember(teamId, [
+    const memberList = store?.teamMemberStore.getTeamMember(teamId, [
       store?.userStore.myUserInfo.accountId,
-    ])[0];
+    ]);
+    myMemberInfo.value = memberList?.[0];
 
     inputValue.value = myMemberInfo.value?.teamNick || "";
   });
 });
-
-const onInputChange = (event) => {
-  const value = event.target.value;
-  inputValue.value = value;
-};
-
-const onInputFocus = () => {
-  showClearIcon.value = true;
-};
 
 const clearInputValue = () => {
   inputValue.value = "";
@@ -116,20 +105,33 @@ onUnmounted(() => {
 
 .userInfo-item-wrapper {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   background-color: #fff;
-  margin: 15px;
-  border-radius: 5px;
+  border-radius: 8px;
+  padding: 12px 16px 5px;
+  margin: 10px 20px;
 }
-.input {
-  display: inline-block;
-  width: 85%;
-  padding: 6px;
+.nick-textarea {
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  font-size: 16px;
+  color: #000;
+  line-height: 1.5;
+  font-family: inherit;
+  padding: 0;
+
+  &::placeholder {
+    color: #c0c4cc;
+  }
 }
 
-.clear-icon {
-  margin-right: 5px;
-  z-index: 999;
+.clear-icon-wrapper {
+  flex-shrink: 0;
+  cursor: pointer;
+  margin-left: 8px;
+  margin-top: 2px;
 }
 </style>

@@ -1,16 +1,15 @@
 <template>
-  <div>
+  <div class="nav-bar-wrapper">
     <div
-      class="nav-bar-wrapper"
+      class="nav-bar-container"
       :style="{
         backgroundColor: backgroundColor || '#ffffff',
-        backgroundImage: `url(${title})`,
         height: '48px',
         alignItems: 'center',
       }"
     >
       <slot v-if="showLeft" name="left"></slot>
-      <div v-else @click="back">
+      <div v-else class="nav-left" @click="back">
         <Icon type="icon-zuojiantou" :size="24"></Icon>
       </div>
       <div class="title-container">
@@ -18,7 +17,7 @@
         <div class="subTitle" v-if="subTitle">{{ subTitle }}</div>
         <slot name="icon"></slot>
       </div>
-      <div>
+      <div class="nav-right">
         <slot name="right"></slot>
       </div>
     </div>
@@ -50,47 +49,65 @@ const back = () => {
 <style scoped>
 /* 导航栏容器 */
 .nav-bar-wrapper {
-  position: fixed;
-  display: flex;
-  justify-content: space-between;
-  padding: 10px;
-  z-index: 9999;
-  color: #000;
-  top: 0;
-  left: 0;
-  right: 0;
-}
+  .nav-bar-container {
+    position: fixed;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 16px;
+    z-index: 9999;
+    color: #000;
+    top: 0;
+    left: 0;
+    right: 0;
+  }
 
-/* 标题容器 */
-.title-container {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 230px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
+  /* 左侧区域 */
+  .nav-left {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+  }
 
-/* 主标题 */
-.title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: center;
-  white-space: nowrap;
-  font-weight: 500;
-  font-size: 17px;
-}
+  /* 右侧区域 */
+  .nav-right {
+    display: flex;
+    align-items: center;
+  }
 
-/* 副标题 */
-.subTitle {
-  white-space: nowrap;
-  font-weight: 500;
-}
+  /* 标题容器 */
+  .title-container {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 230px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
 
-/* 占位块 */
-.block {
-  width: 100%;
-  height: 45px;
+  /* 主标题 */
+  .title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+    white-space: nowrap;
+    font-weight: 500;
+    font-size: 17px;
+  }
+
+  /* 副标题 */
+  .subTitle {
+    white-space: nowrap;
+    font-weight: 500;
+    margin-left: 6px;
+    font-size: 14px;
+    color: #666;
+  }
+
+  /* 占位块 */
+  .block {
+    width: 100%;
+    height: 48px;
+  }
 }
 </style>
