@@ -305,6 +305,17 @@ import { toast } from "../../utils/toast";
 import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import { sendMergedForwardMessage } from "./merged-forward/utils";
 import { friendGroupByPy } from "../../utils/friend";
+import emitter from "../../utils/eventBus";
+import { events } from "../../utils/constants";
+
+// 双 rAF 后触发滚动到底部，确保 Vue 重渲染 + 浏览器 layout 完成后再滚动
+const scrollChatToBottom = () => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      emitter.emit(events.ON_SCROLL_BOTTOM);
+    });
+  });
+};
 
 const RECENT_FORWARDS_KEY = "nim_recent_forwards_v2";
 const MAX_RECENT_FORWARDS = 5;
@@ -623,6 +634,20 @@ const handleForwardConfirm = (forwardComment: string) => {
             name: target.name,
           }, myAccountId.value);
         });
+        // 若目标包含当前会话，转发消息会出现在当前聊天页，需滚动到底部展示新消息
+        if (
+          targets.some((target) => {
+            const convId = nim.V2NIMConversationIdUtil[
+              target.type ===
+              V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P
+                ? "p2pConversationId"
+                : "teamConversationId"
+            ](target.id);
+            return convId === conversationId.value;
+          })
+        ) {
+          scrollChatToBottom();
+        }
       })
       .catch(() => {
         toast.info(t("forwardFailedText"));
@@ -677,6 +702,10 @@ const handleForwardConfirm = (forwardComment: string) => {
             : "team",
         name: "",
       }, myAccountId.value);
+      // 转发到当前会话时，新消息会出现在当前聊天页，需滚动到底部展示
+      if (forwardConversationId === conversationId.value) {
+        scrollChatToBottom();
+      }
     })
     .catch(() => {
       toast.info(t("forwardFailedText"));
