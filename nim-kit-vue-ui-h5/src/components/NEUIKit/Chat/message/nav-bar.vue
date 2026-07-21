@@ -4,7 +4,6 @@
       class="nav-bar-wrapper"
       :style="{
         backgroundColor: backgroundColor || '#ffffff',
-        backgroundImage: `url(${title})`,
         height: '50px',
         alignItems: 'center',
       }"

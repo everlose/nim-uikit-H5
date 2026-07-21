@@ -1,19 +1,21 @@
 <template>
-  <div class="modal" v-if="visible">
-    <div class="mask" @click="handleMaskClick"></div>
-    <div class="content">
-      <div class="title">{{ title }}</div>
-      <div class="slot-content"><slot></slot></div>
-      <div class="buttons">
-        <div v-if="cancelText" class="button cancel" @click="handleCancelClick">
-          {{ cancelText }}
-        </div>
-        <div class="button confirm" :class="{ 'full-width': !cancelText }" @click="handleConfirmClick">
-          {{ confirmText }}
+  <Teleport to="body">
+    <div class="modal" v-if="visible">
+      <div class="mask" @click="handleMaskClick"></div>
+      <div class="content">
+        <div class="title">{{ title }}</div>
+        <div class="slot-content"><slot></slot></div>
+        <div class="buttons">
+          <div v-if="cancelText" class="button cancel" @click="handleCancelClick">
+            {{ cancelText }}
+          </div>
+          <div class="button confirm" :class="{ 'full-width': !cancelText }" @click="handleConfirmClick">
+            {{ confirmText }}
+          </div>
         </div>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script lang="ts" setup>
