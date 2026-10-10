@@ -1,4 +1,6 @@
 import React, { useEffect } from 'react'
+import emitter from '@/NEUIKit/common/utils/eventBus'
+import { events } from '@/NEUIKit/common/utils/constants'
 import './index.less'
 
 export interface PreviewImageProps {
@@ -39,6 +41,7 @@ const PreviewImage: React.FC<PreviewImageProps> = ({ visible, imageUrl, onClose 
   useEffect(() => {
     if (visible) {
       document.body.style.overflow = 'hidden'
+      emitter.emit(events.MESSAGE_PREVIEW_OPEN)
     } else {
       document.body.style.overflow = ''
     }
@@ -46,6 +49,9 @@ const PreviewImage: React.FC<PreviewImageProps> = ({ visible, imageUrl, onClose 
     // 组件卸载时恢复滚动
     return () => {
       document.body.style.overflow = ''
+      if (visible) {
+        emitter.emit(events.MESSAGE_PREVIEW_CLOSE)
+      }
     }
   }, [visible])
 

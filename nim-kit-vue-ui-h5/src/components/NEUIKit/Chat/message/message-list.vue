@@ -74,7 +74,13 @@ const props = withDefaults(
     autoScrollToBottom?: boolean;
     onLoadOlder?: (firstMsg?: V2NIMMessageForUI) => void | Promise<unknown>;
     onLoadNewer?: (lastMsg?: V2NIMMessageForUI) => void | Promise<unknown>;
+    /**
+     * show：是否需要展示“回到最新”入口（滚过最后一条正常消息的高度才算离开最新）
+     * atLatest：视口是否真的在消息列表底部（仅能测量时透传），用于新消息提醒的计数与位置保持
+     */
+    onLatestVisibilityChange?: (show: boolean, atLatest?: boolean) => void;
     isMultiSelecting?: boolean;
+    isScrollLocked?: boolean;
     selectedMessageIds?: string[];
     onToggleSelect?: (msg: V2NIMMessageForUI) => void;
     onMultiSelect?: (msg: V2NIMMessageForUI) => void;
@@ -87,6 +93,7 @@ const props = withDefaults(
     loadingNewer: false,
     autoScrollToBottom: true,
     isMultiSelecting: false,
+    isScrollLocked: false,
     selectedMessageIds: () => [],
   }
 );
@@ -100,17 +107,24 @@ const broadcastNewAudioSrc = ref<string>("");
 const anchorScrolled = ref(false);
 const anchorScrollId = ref("");
 const pagingLock = ref(false);
+const restoringScrollPosition = ref(false);
 const pendingPagination = ref<{
   direction: "older" | "newer";
   prevScrollHeight: number;
   prevScrollTop: number;
 } | null>(null);
 
+interface MessageListScrollSnapshot {
+  anchorMessageClientId: string;
+  anchorOffsetTop: number;
+  scrollTop: number;
+}
+
 const isNormalMsg = (item: any) =>
   !(
     item.messageType ===
       V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM &&
-    ["beReCallMsg", "reCallMsg"].includes(item.recallType || "")
+    (item.timeValue !== undefined || ["beReCallMsg", "reCallMsg"].includes(item.recallType || ""))
   );
 
 // 处理完的最终消息列表
@@ -147,11 +161,145 @@ const getLastNormalMsg = () => {
   return normalMsgs[normalMsgs.length - 1];
 };
 
+// 最后一条正常消息的标识。撤回时列表长度不变，但“最后一条正常消息”会换成更早的一条，
+// 需要据此重新建立观察，避免 ResizeObserver 一直挂在已被删除的节点上。
+const lastNormalMessageClientId = computed(
+  () => getLastNormalMsg()?.messageClientId || ""
+);
+
+let latestMessageResizeObserver: ResizeObserver | null = null;
+// “回到最新”入口上一次的判定结果（连带当时的滚动位置）
+let latestVisibilitySnapshot: { scrollTop: number; show: boolean } | null = null;
+
+/**
+ * 解析“回到最新”入口是否展示。
+ * - 视口真的在底部（atLatest）时一定不展示；
+ * - 用户滚动了位置时按产品口径重算：滚过最后一条正常消息的高度才算离开最新；
+ * - 位置没变、只有内容变化时（撤回把最后一条换成更早的一条、图片加载完成等）沿用上一次判定，
+ *   否则内容变化会在用户手指没动的情况下翻转判定，出现“撤回后回到最新箭头消失”。
+ */
+const resolveLatestVisibility = (
+  scrollTop: number,
+  distanceFromBottom: number,
+  atLatest: boolean
+) => {
+  const previous = latestVisibilitySnapshot;
+  let show: boolean;
+  if (atLatest) {
+    show = false;
+  } else if (!previous || previous.scrollTop !== scrollTop) {
+    const lastMsg = getLastNormalMsg();
+    const lastElement = lastMsg?.messageClientId
+      ? document.getElementById(`${MSG_ID_FLAG}${lastMsg.messageClientId}`)
+      : null;
+    const latestMessageHeight = lastElement
+      ? Math.max(lastElement.getBoundingClientRect().height, 1)
+      : 0;
+    show =
+      latestMessageHeight > 0
+        ? distanceFromBottom >= latestMessageHeight - 1
+        : distanceFromBottom > 1;
+  } else {
+    show = previous.show;
+  }
+  latestVisibilitySnapshot = { scrollTop, show };
+  return show;
+};
+
+const updateLatestVisibility = () => {
+  if (!messageListRef.value) {
+    props.onLatestVisibilityChange?.(false);
+    return;
+  }
+  const { scrollTop, scrollHeight, clientHeight } = messageListRef.value;
+  const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+  // 位置口径：只表达“视口是否真的在列表底部”，不受消息内容高度影响，
+  // 用于新消息提醒的计数与是否保持滚动位置。
+  const atLatest = distanceFromBottom <= 1;
+  props.onLatestVisibilityChange?.(
+    resolveLatestVisibility(scrollTop, distanceFromBottom, atLatest),
+    atLatest
+  );
+};
+
+const captureScrollPosition = (): MessageListScrollSnapshot | null => {
+  const container = messageListRef.value;
+  if (!container) return null;
+  const containerTop = container.getBoundingClientRect().top;
+  const anchor = Array.from(
+    container.querySelectorAll<HTMLElement>(`[id^="${MSG_ID_FLAG}"]`)
+  ).find((element) => element.getBoundingClientRect().bottom > containerTop);
+  return {
+    anchorMessageClientId: anchor?.id.slice(MSG_ID_FLAG.length) || "",
+    anchorOffsetTop: anchor
+      ? anchor.getBoundingClientRect().top - containerTop
+      : 0,
+    scrollTop: container.scrollTop,
+  };
+};
+
+const restoreScrollPosition = (snapshot: MessageListScrollSnapshot | null) => {
+  if (!snapshot) return;
+  restoringScrollPosition.value = true;
+  requestAnimationFrame(() => {
+    const container = messageListRef.value;
+    if (!container) {
+      restoringScrollPosition.value = false;
+      return;
+    }
+    const anchor = snapshot.anchorMessageClientId
+      ? document.getElementById(
+          `${MSG_ID_FLAG}${snapshot.anchorMessageClientId}`
+        )
+      : null;
+    if (anchor) {
+      const currentOffset =
+        anchor.getBoundingClientRect().top -
+        container.getBoundingClientRect().top;
+      container.scrollTop += currentOffset - snapshot.anchorOffsetTop;
+    } else {
+      container.scrollTop = snapshot.scrollTop;
+    }
+    updateLatestVisibility();
+    requestAnimationFrame(() => {
+      restoringScrollPosition.value = false;
+    });
+  });
+};
+
+defineExpose({ captureScrollPosition, restoreScrollPosition });
+
+const observeLatestMessage = () => {
+  latestMessageResizeObserver?.disconnect();
+  latestMessageResizeObserver = null;
+  const lastMsg = getLastNormalMsg();
+  const lastElement = lastMsg?.messageClientId
+    ? document.getElementById(`${MSG_ID_FLAG}${lastMsg.messageClientId}`)
+    : null;
+  if (lastElement) {
+    latestMessageResizeObserver = new ResizeObserver(updateLatestVisibility);
+    latestMessageResizeObserver.observe(lastElement);
+  }
+  updateLatestVisibility();
+};
+
 // 消息滑动到底部
-const scrollToBottom = () => {
+const scrollToBottom = (event?: unknown) => {
+  if (
+    props.isMultiSelecting ||
+    props.isScrollLocked ||
+    restoringScrollPosition.value
+  ) return;
+  const options = event as { behavior?: ScrollBehavior } | undefined;
   nextTick(() => {
     if (messageListRef.value) {
-      messageListRef.value.scrollTop = messageListRef.value.scrollHeight;
+      const top = messageListRef.value.scrollHeight;
+      if (options?.behavior === "smooth") {
+        messageListRef.value.scrollTo({ top, behavior: "smooth" });
+      } else {
+        messageListRef.value.scrollTop = top;
+      }
+      updateLatestVisibility();
     }
   });
 };
@@ -238,6 +386,7 @@ const handleScroll = () => {
   }
 
   const { scrollTop, scrollHeight, clientHeight } = messageListRef.value;
+  updateLatestVisibility();
   if (
     props.anchorMode &&
     props.onLoadNewer &&
@@ -302,6 +451,7 @@ onMounted(() => {
     } else if (props.autoScrollToBottom) {
       scrollToBottom();
     }
+    nextTick(observeLatestMessage);
   }, 100);
 
   // 记录上一次的状态，用于判断 resize 前用户是否在底部
@@ -319,12 +469,18 @@ onMounted(() => {
     // 容器变矮（键盘弹起）时，之前用户在底部附近 → 需要保持滚到底部
     const containerShrunk = clientHeight < prevState.clientHeight;
 
-    if (isNearBottom || (wasNearBottom && containerShrunk)) {
+    if (
+      !props.isMultiSelecting &&
+      !props.isScrollLocked &&
+      !restoringScrollPosition.value &&
+      (isNearBottom || (wasNearBottom && containerShrunk))
+    ) {
       el.scrollTop = scrollHeight;
     }
 
     prevState.clientHeight = clientHeight;
     prevState.distanceFromBottom = distanceFromBottom;
+    updateLatestVisibility();
   };
 
   if (scrollEl) {
@@ -360,19 +516,30 @@ watch(
       if (scrollToAnchor()) {
         anchorScrolled.value = true;
       }
+      nextTick(observeLatestMessage);
     }, 100);
   }
 );
 
 watch(
-  () => [finalMsgs.value.length, props.loadingOlder, props.loadingNewer],
+  () => [
+    finalMsgs.value.length,
+    lastNormalMessageClientId.value,
+    props.loadingOlder,
+    props.loadingNewer,
+  ],
   () => {
     const pending = pendingPagination.value;
-    if (!pending || props.loadingOlder || props.loadingNewer) {
-      return;
+    if (pending && !props.loadingOlder && !props.loadingNewer) {
+      unlockPaginationAfterRender();
     }
-    unlockPaginationAfterRender();
+    nextTick(observeLatestMessage);
   }
+);
+
+watch(
+  () => props.anchorMode,
+  () => nextTick(observeLatestMessage)
 );
 
 watch(
@@ -394,6 +561,8 @@ onUnmounted(() => {
   resizeObserver?.disconnect();
   resizeObserver = null;
   cancelAnimationFrame(resizeRafId);
+  latestMessageResizeObserver?.disconnect();
+  latestMessageResizeObserver = null;
   if (onViewportResize) {
     window.visualViewport?.removeEventListener('resize', onViewportResize);
     onViewportResize = null;

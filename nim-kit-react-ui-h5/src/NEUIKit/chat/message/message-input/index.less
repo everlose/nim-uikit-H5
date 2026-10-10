@@ -29,6 +29,14 @@
     box-sizing: border-box;
   }
 
+  .msg-input-wrapper.audio-recording {
+    .input-inner,
+    .input-action-bar {
+      visibility: hidden;
+      pointer-events: none;
+    }
+  }
+
   .input-action-icon {
     width: 36px;
     height: 36px;
@@ -54,9 +62,13 @@
     background-color: transparent;
   }
 
-  .input-send-more {
-    justify-self: end;
+  .input-action-audio.active {
+    background-color: rgba(0, 0, 0, 0.05);
   }
+
+  // .input-send-more {
+  //   justify-self: end;
+  // }
 
 
   .send-more-expand {
@@ -105,6 +117,124 @@
     font-size: 16px;
     border-radius: 6px;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  .audio-record-panel {
+    position: relative;
+    width: 100%;
+    height: 202px;
+    padding: 24px 12px 28px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    background-color: #eff1f3;
+    overflow: hidden;
+  }
+
+  .audio-record-panel.recording .audio-record-tip {
+    position: absolute;
+    top: -32px;
+    right: 12px;
+    left: 12px;
+    min-height: 16px;
+    z-index: 3;
+  }
+
+  .audio-record-panel.recording {
+    overflow: visible;
+  }
+
+  .audio-record-button {
+    position: relative;
+    width: 103px;
+    height: 103px;
+    flex: 0 0 103px;
+    border: 0;
+    padding: 0;
+    border-radius: 50%;
+    overflow: visible;
+    background: transparent;
+    color: #222;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    z-index: 1;
+  }
+
+  .audio-record-button .nim-icon-wrapper {
+    pointer-events: none;
+  }
+
+  .audio-record-circle {
+    width: 103px;
+    height: 103px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background: linear-gradient(135deg, #6aa1ff 0%, #3479ee 100%);
+    z-index: 2;
+  }
+
+  .audio-record-ripple,
+  .audio-record-ripple::before,
+  .audio-record-ripple::after {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 103px;
+    height: 103px;
+    border-radius: 50%;
+    background-color: rgba(81, 142, 248, 0.28);
+    content: '';
+    pointer-events: none;
+    z-index: 0;
+    transform-origin: center center;
+  }
+
+  .audio-record-ripple {
+    animation: audio-record-ripple 1.6s ease-out infinite;
+  }
+
+  .audio-record-ripple::before {
+    animation: audio-record-ripple 1.6s ease-out 0.5s infinite;
+  }
+
+  .audio-record-ripple::after {
+    animation: audio-record-ripple 1.6s ease-out 1s infinite;
+  }
+
+  .audio-record-tip {
+    min-height: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: #999;
+    font-size: 12px;
+    line-height: 16px;
+    text-align: center;
+  }
+
+  @keyframes audio-record-ripple {
+    0% {
+      transform: scale(1);
+      opacity: 0.75;
+    }
+    100% {
+      transform: scale(1.46);
+      opacity: 0;
+    }
   }
 
   .reply-message-wrapper {

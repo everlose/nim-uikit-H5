@@ -1,0 +1,29 @@
+.msg-location-viewer {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  overflow: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #fff;
+  z-index: 999999999;
+
+  &-card {
+    box-sizing: border-box;
+    max-width: 90vw;
+    padding: 16px 20px;
+  }
+
+  &-close {
+    position: fixed;
+    right: 20px;
+    top: 60px;
+    z-index: 999999;
+  }
+}

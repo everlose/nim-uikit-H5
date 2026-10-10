@@ -53,7 +53,10 @@
         </div>
       </div>
     </div>
-    <div class="msg-input-wrapper">
+    <div
+      class="msg-input-wrapper"
+      :class="{ 'audio-recording': audioSnapshot.state === 'recording' }"
+    >
       <div class="input-inner">
         <!-- 当从表情面板切换到文字输入时，直接唤起键盘，会导致input框滚动消失，故此处需要一个fake Input兼容下，保证先隐藏表情/其他面板，再弹出键盘 -->
         <div v-show="showFakeInput" @click="onHideFakeInput" class="fake-input">
@@ -88,13 +91,26 @@
         >
         </Input>
       </div>
-
       <!-- 操作栏：四列布局，与 Android 对齐 -->
       <div class="input-action-bar">
+        <div
+          class="input-action-icon input-action-audio"
+          :class="{ active: audioInputVisible }"
+          role="button"
+          tabindex="0"
+          @click="handleAudioModeToggle"
+          @keydown.enter="handleAudioModeToggle"
+          @keydown.space.prevent="handleAudioModeToggle"
+        >
+          <Icon
+            :size="24"
+            :type="audioInputVisible ? 'audio-btn-selected' : 'icon-audio'"
+          />
+        </div>
         <div class="input-action-icon" @click="handleEmojiVisible">
           <Icon :size="24" :type="emojiVisible ? 'icon-emoji-active' : 'icon-emoji-normal'" />
         </div>
-        <div class="input-action-icon">
+        <div class="input-action-icon" @click="closeAudioInput">
           <input
             type="file"
             ref="imageInput"
@@ -105,7 +121,6 @@
           />
           <Icon :size="24" type="icon-tupian" />
         </div>
-        <div class="input-action-icon input-action-empty" />
         <div
           class="input-action-icon input-send-more"
           :class="{ active: sendMoreVisible }"
@@ -115,13 +130,52 @@
         </div>
       </div>
 
+      <div
+        v-if="audioInputVisible"
+        class="audio-record-panel"
+        :class="{ recording: audioSnapshot.state === 'recording' }"
+      >
+        <button
+          type="button"
+          class="audio-record-button"
+          @pointerdown="handleAudioPointerDown"
+          @pointermove="handleAudioPointerMove"
+          @pointerup="handleAudioPointerUp"
+          @pointercancel="handleAudioPointerCancel"
+          ref="audioRecordButton"
+          @selectstart.prevent="preventAudioNativeGesture"
+          @dragstart.prevent="preventAudioNativeGesture"
+          @contextmenu.stop.prevent="preventAudioNativeGesture"
+        >
+          <span
+            v-if="audioSnapshot.state === 'recording'"
+            class="audio-record-ripple"
+            aria-hidden="true"
+          />
+          <span class="audio-record-circle">
+            <Icon
+              :width="26"
+              :height="30"
+              type="audio-btn"
+              :disable-native-long-press="true"
+            />
+          </span>
+        </button>
+        <div class="audio-record-tip">
+          <template v-if="audioSnapshot.state === 'recording'">
+            <span>{{ t("audioRecordingHintText") }}</span>
+          </template>
+          <span v-else>{{ t("audioBtnText") }}</span>
+        </div>
+      </div>
+
       <!-- 更多操作扩展区 -->
       <div v-if="sendMoreVisible" class="send-more-expand" @click.stop>
         <div class="send-more-expand-item" @click="handleCameraClick">
           <div class="send-more-expand-icon">
             <Icon :size="26" type="icon-paishe" />
           </div>
-          <div class="send-more-expand-label">拍摄</div>
+          <div class="send-more-expand-label">{{ t("shootText") }}</div>
         </div>
         <div class="send-more-expand-item">
           <input
@@ -177,11 +231,13 @@ import Face from "./face.vue";
 import Icon from "../../CommonComponents/Icon.vue";
 import {
   ref,
+  shallowRef,
   getCurrentInstance,
   computed,
   onUnmounted,
   onMounted,
   nextTick,
+  watch,
 } from "vue";
 import {
   ALLOW_AT,
@@ -213,6 +269,9 @@ import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import BottomPopup from "../../CommonComponents/BottomPopup.vue";
 import ActionSheet from "../../CommonComponents/ActionSheet.vue";
 import MentionChooseList from "./mention-choose-list.vue";
+import { useAudioRecorder } from "./audio-recorder/useAudioRecorder";
+import { AudioRecorderError } from "./audio-recorder/types";
+import type { AudioRecorderResult } from "./audio-recorder/types";
 
 const { proxy } = getCurrentInstance()!; // 获取组件实例
 const store = proxy?.$UIKitStore;
@@ -243,6 +302,29 @@ const inputText = ref("");
 const sendMoreVisible = ref(false);
 // 表情面板flag
 const emojiVisible = ref(false);
+// 语音输入模式
+const audioInputVisible = ref(false);
+const isAudioCanceling = ref(false);
+const audioPressing = ref(false);
+const audioRecordButton = ref<HTMLButtonElement | null>(null);
+const audioTouchIdentifier = ref<number | null>(null);
+type AudioSendContext = {
+  conversationId: string;
+  accountId: string;
+  nim: any;
+  store: any;
+};
+const inputMounted = ref(false);
+// Keep SDK/store identities intact for the async stale-context guard.
+const audioSendContext = shallowRef<AudioSendContext | null>(null);
+
+onMounted(() => {
+  inputMounted.value = true;
+});
+onUnmounted(() => {
+  inputMounted.value = false;
+  audioSendContext.value = null;
+});
 
 // 用于解决表情面板和键盘冲突，导致输入框滚动消失问题
 const showFakeInput = ref(false);
@@ -473,6 +555,323 @@ const scrollBottom = () => {
   emitter.emit(events.ON_SCROLL_BOTTOM);
 };
 
+const scrollBottomAfterRender = () => {
+  nextTick(() => {
+    nextTick(() => {
+      scrollBottom();
+    });
+  });
+};
+
+const getAudioSendContext = (): AudioSendContext => ({
+  conversationId,
+  accountId: proxy?.$NIM.V2NIMLoginService.getLoginUser() || "",
+  nim: proxy?.$NIM,
+  store,
+});
+
+const isAudioSendContextActive = (context: AudioSendContext) => {
+  if (
+    !inputMounted.value ||
+    context.nim !== proxy?.$NIM ||
+    context.store !== store ||
+    context.conversationId !== conversationId
+  ) {
+    return false;
+  }
+  try {
+    return (
+      store?.uiStore?.selectedConversation === context.conversationId &&
+      proxy?.$NIM.V2NIMLoginService.getLoginUser() === context.accountId
+    );
+  } catch {
+    return false;
+  }
+};
+
+const getAudioErrorText = (error: AudioRecorderError) => {
+  if (error.kind === "unsupported") return t("audioUnsupportedText");
+  if (error.kind === "permission") return t("audioPermissionText");
+  if (error.kind === "too_short") return t("audioTooShortText");
+  return t("audioErrorText");
+};
+
+const handleAudioError = (error: AudioRecorderError) => {
+  toast.info(getAudioErrorText(error));
+};
+
+const sendAudioMessage = async ({ file, durationMs }: AudioRecorderResult) => {
+  const sendContext = audioSendContext.value || getAudioSendContext();
+  if (!isAudioSendContextActive(sendContext)) {
+    audioSendContext.value = null;
+    return;
+  }
+
+  // 发送后收起录音面板，避免面板布局变化遮挡最新消息。
+  audioPressing.value = false;
+  isAudioCanceling.value = false;
+  audioInputVisible.value = false;
+  showFakeInput.value = false;
+  audioSendContext.value = null;
+  emit("send-message");
+  const audioMessage = proxy?.$NIM.V2NIMMessageCreator.createAudioMessage(
+    file,
+    file.name,
+    undefined,
+    durationMs,
+  );
+
+  try {
+    await store?.msgStore.sendMessageActive({
+      msg: audioMessage as unknown as V2NIMMessage,
+      conversationId,
+      progress: () => true,
+      sendBefore: () => {
+        if (isAudioSendContextActive(sendContext)) scrollBottomAfterRender();
+      },
+    });
+  } catch (error) {
+    if (isAudioSendContextActive(sendContext)) {
+      toast.info(t("sendAudioFailedText"));
+    }
+  } finally {
+    if (isAudioSendContextActive(sendContext)) {
+      scrollBottomAfterRender();
+    }
+  }
+};
+
+const {
+  snapshot: audioSnapshot,
+  start: startAudio,
+  stop: stopAudio,
+  cancel: cancelAudio,
+} = useAudioRecorder(sendAudioMessage, handleAudioError);
+
+const handleAudioTouchStart = async (event: TouchEvent) => {
+  const touch = event.changedTouches[0];
+  if (isTeamMute.value || audioPressing.value || !touch) return;
+  event.preventDefault();
+  event.stopPropagation();
+  audioTouchIdentifier.value = touch.identifier;
+  audioPressing.value = true;
+  isAudioCanceling.value = false;
+  audioSendContext.value = getAudioSendContext();
+  try {
+    await startAudio();
+    if (!audioPressing.value) await cancelAudio();
+  } catch (error) {
+    const sendContext = audioSendContext.value;
+    audioSendContext.value = null;
+    if (
+      error instanceof AudioRecorderError &&
+      inputMounted.value &&
+      sendContext &&
+      isAudioSendContextActive(sendContext)
+    ) {
+      handleAudioError(error);
+    }
+  }
+};
+
+const handleAudioTouchMove = (event: TouchEvent) => {
+  if (!audioPressing.value) return;
+  const touch = Array.from(event.touches).find(
+    (item) => item.identifier === audioTouchIdentifier.value,
+  );
+  const target = audioRecordButton.value;
+  if (!touch || !target) return;
+  event.preventDefault();
+  const rect = target.getBoundingClientRect();
+  const nextCanceling = !(
+    touch.clientX >= rect.left &&
+    touch.clientX <= rect.right &&
+    touch.clientY >= rect.top &&
+    touch.clientY <= rect.bottom
+  );
+  isAudioCanceling.value = nextCanceling;
+};
+
+const handleAudioTouchEnd = async (event: TouchEvent) => {
+  const touch = Array.from(event.changedTouches).find(
+    (item) => item.identifier === audioTouchIdentifier.value,
+  );
+  if (!touch || !audioPressing.value) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const sendContext = audioSendContext.value;
+  const shouldCancel =
+    isAudioCanceling.value || audioSnapshot.value.state !== "recording";
+  audioTouchIdentifier.value = null;
+  audioPressing.value = false;
+  isAudioCanceling.value = false;
+  try {
+    if (shouldCancel) {
+      await cancelAudio();
+    } else {
+      const result = await stopAudio();
+      if (result) await sendAudioMessage(result);
+    }
+    audioSendContext.value = null;
+  } catch (error) {
+    audioSendContext.value = null;
+    if (
+      error instanceof AudioRecorderError &&
+      inputMounted.value &&
+      sendContext &&
+      isAudioSendContextActive(sendContext)
+    ) {
+      handleAudioError(error);
+    }
+  }
+};
+
+const handleAudioTouchCancel = async (event: TouchEvent) => {
+  if (!audioPressing.value) return;
+  event.preventDefault();
+  audioTouchIdentifier.value = null;
+  audioPressing.value = false;
+  isAudioCanceling.value = false;
+  audioSendContext.value = null;
+  await cancelAudio();
+};
+
+let removeAudioTouchListeners = () => {};
+watch(
+  audioInputVisible,
+  async (visible) => {
+    removeAudioTouchListeners();
+    if (!visible) return;
+    await nextTick();
+    const target = audioRecordButton.value;
+    if (!target || "PointerEvent" in window) return;
+    const options = { capture: true, passive: false };
+    const onTouchStart = (event: TouchEvent) => void handleAudioTouchStart(event);
+    const onTouchMove = (event: TouchEvent) => void handleAudioTouchMove(event);
+    const onTouchEnd = (event: TouchEvent) => void handleAudioTouchEnd(event);
+    const onTouchCancel = (event: TouchEvent) => void handleAudioTouchCancel(event);
+    target.addEventListener("touchstart", onTouchStart, options);
+    document.addEventListener("touchmove", onTouchMove, options);
+    document.addEventListener("touchend", onTouchEnd, options);
+    document.addEventListener("touchcancel", onTouchCancel, options);
+    removeAudioTouchListeners = () => {
+      target.removeEventListener("touchstart", onTouchStart, options);
+      document.removeEventListener("touchmove", onTouchMove, options);
+      document.removeEventListener("touchend", onTouchEnd, options);
+      document.removeEventListener("touchcancel", onTouchCancel, options);
+      removeAudioTouchListeners = () => {};
+    };
+  },
+  { flush: "post" },
+);
+
+const handleAudioPointerDown = async (event: PointerEvent) => {
+  if (isTeamMute.value) return;
+  event.preventDefault();
+  const target = event.currentTarget as HTMLElement;
+  try {
+    target.setPointerCapture(event.pointerId);
+  } catch {}
+  audioSendContext.value = getAudioSendContext();
+  audioPressing.value = true;
+  isAudioCanceling.value = false;
+
+  try {
+    await startAudio();
+    if (!audioPressing.value) await cancelAudio();
+  } catch (error) {
+    if (error instanceof AudioRecorderError && inputMounted.value) {
+      handleAudioError(error);
+    }
+  }
+};
+
+const preventAudioNativeGesture = (event: Event) => {
+  event.preventDefault();
+  event.stopPropagation();
+};
+
+const handleAudioPointerMove = (event: PointerEvent) => {
+  if (!audioPressing.value) return;
+  const target = event.currentTarget as HTMLElement;
+  const rect = target.getBoundingClientRect();
+  isAudioCanceling.value = !(
+    event.clientX >= rect.left &&
+    event.clientX <= rect.right &&
+    event.clientY >= rect.top &&
+    event.clientY <= rect.bottom
+  );
+};
+
+const handleAudioPointerUp = async (event: PointerEvent) => {
+  event.preventDefault();
+  const target = event.currentTarget as HTMLElement;
+  const pointerId = event.pointerId;
+  const sendContext = audioSendContext.value;
+  audioPressing.value = false;
+  const shouldCancel =
+    isAudioCanceling.value || audioSnapshot.value.state !== "recording";
+  isAudioCanceling.value = false;
+
+  try {
+    if (shouldCancel) {
+      await cancelAudio();
+      audioSendContext.value = null;
+    } else {
+      const result = await stopAudio();
+      if (result) await sendAudioMessage(result);
+      else audioSendContext.value = null;
+    }
+  } catch (error) {
+    audioSendContext.value = null;
+    if (
+      error instanceof AudioRecorderError &&
+      inputMounted.value &&
+      sendContext &&
+      isAudioSendContextActive(sendContext)
+    ) {
+      handleAudioError(error);
+    }
+  } finally {
+    if (target.hasPointerCapture(pointerId)) {
+      target.releasePointerCapture(pointerId);
+    }
+  }
+};
+
+const handleAudioPointerCancel = async () => {
+  audioPressing.value = false;
+  isAudioCanceling.value = false;
+  audioSendContext.value = null;
+  await cancelAudio();
+};
+
+const closeAudioInput = () => {
+  const shouldCancel =
+    audioInputVisible.value ||
+    audioPressing.value ||
+    audioSnapshot.value.state !== "idle";
+  audioPressing.value = false;
+  isAudioCanceling.value = false;
+  audioInputVisible.value = false;
+  showFakeInput.value = false;
+  audioSendContext.value = null;
+  if (shouldCancel) void cancelAudio();
+};
+
+const handleAudioModeToggle = () => {
+  if (isTeamMute.value) return;
+  if (audioInputVisible.value) {
+    closeAudioInput();
+  } else {
+    audioInputVisible.value = true;
+    showFakeInput.value = false;
+  }
+  emojiVisible.value = false;
+  sendMoreVisible.value = false;
+  emitter.emit(events.ON_SCROLL_BOTTOM);
+};
+
 // 发送文本消息
 const handleSendTextMsg = () => {
   if (inputText.value.trim() === "") return;
@@ -518,6 +917,7 @@ const removeReplyMsg = () => {
 // 显示表情面板
 const handleEmojiVisible = () => {
   if (isTeamMute.value) return;
+  closeAudioInput();
   emojiVisible.value = true;
 
   showFakeInput.value = true;
@@ -550,6 +950,7 @@ const handleEmojiDelete = () => {
 /** 显示发送更多"+"面板 */
 const handleSendMoreVisible = () => {
   if (isTeamMute.value) return;
+  closeAudioInput();
   emojiVisible.value = false;
   sendMoreVisible.value = !sendMoreVisible.value;
   showFakeInput.value = true;
@@ -614,13 +1015,13 @@ const onImageSelected = async (event: Event) => {
       conversationId,
       progress: () => true,
       sendBefore: () => {
-        scrollBottom();
+        scrollBottomAfterRender();
       },
     });
 
-    scrollBottom();
+    scrollBottomAfterRender();
   } catch (err) {
-    scrollBottom();
+    scrollBottomAfterRender();
     toast.info(
       isVideo ? t("sendVideoFailedText") : t("sendImageFailedText")
     );
@@ -648,13 +1049,13 @@ const onFileSelected = async (event: Event) => {
       conversationId,
       progress: () => true,
       sendBefore: () => {
-        scrollBottom();
+        scrollBottomAfterRender();
       },
     });
 
-    scrollBottom();
+    scrollBottomAfterRender();
   } catch (err) {
-    scrollBottom();
+    scrollBottomAfterRender();
     toast.info(t("sendFileFailedText"));
   } finally {
     // 清空 input 的值，这样用户可以重复选择同一个文件
@@ -678,11 +1079,11 @@ const onCameraPhotoSelected = async (event: Event) => {
       msg: fileMsg as unknown as V2NIMMessage,
       conversationId,
       progress: () => true,
-      sendBefore: () => scrollBottom(),
+      sendBefore: () => scrollBottomAfterRender(),
     });
-    scrollBottom();
+    scrollBottomAfterRender();
   } catch (err) {
-    scrollBottom();
+    scrollBottomAfterRender();
     toast.info(t("sendImageFailedText"));
   } finally {
     if (cameraPhotoInput.value) cameraPhotoInput.value.value = "";
@@ -703,11 +1104,11 @@ const onCameraVideoSelected = async (event: Event) => {
       msg: fileMsg as unknown as V2NIMMessage,
       conversationId,
       progress: () => true,
-      sendBefore: () => scrollBottom(),
+      sendBefore: () => scrollBottomAfterRender(),
     });
-    scrollBottom();
+    scrollBottomAfterRender();
   } catch (err) {
-    scrollBottom();
+    scrollBottomAfterRender();
     toast.info(t("sendVideoFailedText"));
   } finally {
     if (cameraVideoInput.value) cameraVideoInput.value.value = "";
@@ -717,6 +1118,7 @@ const onCameraVideoSelected = async (event: Event) => {
 // 输入框聚焦
 const handleInputFocus = () => {
   isFocus.value = true;
+  if (audioInputVisible.value) closeAudioInput();
   // 记录当前光标位置
   if (msgInputRef.value && msgInputRef.value.inputRef) {
     cursorPosition.value = msgInputRef.value.inputRef.selectionStart || 0;
@@ -766,6 +1168,13 @@ const handleCloseMention = () => {
 
 let uninstallTeamWatch = () => {};
 
+const cancelOnPageHidden = () => {
+  audioPressing.value = false;
+  isAudioCanceling.value = false;
+  audioSendContext.value = null;
+  void cancelAudio();
+};
+
 onMounted(() => {
   uninstallTeamWatch = autorun(() => {
     if (
@@ -796,6 +1205,8 @@ onMounted(() => {
       updateTeamMute();
     }
   });
+  document.addEventListener("visibilitychange", cancelOnPageHidden);
+  window.addEventListener("pagehide", cancelOnPageHidden);
 
   // 撤回后，重新编辑消息
   emitter.on(events.ON_REEDIT_MSG, (_msg) => {
@@ -868,12 +1279,20 @@ onMounted(() => {
   emitter.on(events.CLOSE_PANEL, () => {
     emojiVisible.value = false;
     sendMoreVisible.value = false;
+    audioInputVisible.value = false;
+    isAudioCanceling.value = false;
+    audioPressing.value = false;
+    audioSendContext.value = null;
+    void cancelAudio();
   });
 });
 
 onUnmounted(() => {
   removeReplyMsg();
   uninstallTeamWatch();
+  removeAudioTouchListeners();
+  document.removeEventListener("visibilitychange", cancelOnPageHidden);
+  window.removeEventListener("pagehide", cancelOnPageHidden);
 });
 </script>
 
@@ -917,6 +1336,12 @@ onUnmounted(() => {
   box-sizing: border-box;
 }
 
+.msg-input-wrapper.audio-recording .input-inner,
+.msg-input-wrapper.audio-recording .input-action-bar {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .input-action-icon {
   width: 36px;
   height: 36px;
@@ -942,9 +1367,13 @@ onUnmounted(() => {
   background-color: transparent;
 }
 
-.input-send-more {
-  justify-self: end;
+.input-action-audio.active {
+  background-color: rgba(0, 0, 0, 0.05);
 }
+
+/* .input-send-more {
+  justify-self: end;
+} */
 
 .send-more-expand {
   display: grid;
@@ -983,6 +1412,129 @@ onUnmounted(() => {
   width: 100%;
   background-color: #fff;
   z-index: 1;
+}
+
+.audio-record-panel {
+  position: relative;
+  width: 100%;
+  height: 202px;
+  padding: 24px 12px 28px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  background-color: #eff1f3;
+  overflow: hidden;
+}
+
+.audio-record-panel.recording .audio-record-tip {
+  position: absolute;
+  top: -32px;
+  right: 12px;
+  left: 12px;
+  min-height: 16px;
+  z-index: 3;
+}
+
+.audio-record-panel.recording {
+  overflow: visible;
+}
+
+.audio-record-button {
+  position: relative;
+  width: 103px;
+  height: 103px;
+  flex: 0 0 103px;
+  border: 0;
+  padding: 0;
+  border-radius: 50%;
+  overflow: visible;
+  background: transparent;
+  color: #222;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  z-index: 1;
+}
+
+.audio-record-button :deep(.icon-wrapper),
+.audio-record-button :deep(.icon) {
+  pointer-events: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
+.audio-record-circle {
+  width: 103px;
+  height: 103px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: linear-gradient(135deg, #6aa1ff 0%, #3479ee 100%);
+  z-index: 2;
+}
+
+.audio-record-ripple,
+.audio-record-ripple::before,
+.audio-record-ripple::after {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 103px;
+  height: 103px;
+  border-radius: 50%;
+  background-color: rgba(81, 142, 248, 0.28);
+  content: '';
+  pointer-events: none;
+  z-index: 0;
+  transform-origin: center center;
+}
+
+.audio-record-ripple {
+  animation: audio-record-ripple 1.6s ease-out infinite;
+}
+
+.audio-record-ripple::before {
+  animation: audio-record-ripple 1.6s ease-out 0.5s infinite;
+}
+
+.audio-record-ripple::after {
+  animation: audio-record-ripple 1.6s ease-out 1s infinite;
+}
+
+.audio-record-tip {
+  min-height: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #999;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+}
+
+@keyframes audio-record-ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scale(1.46);
+    opacity: 0;
+  }
 }
 
 .reply-message-wrapper {

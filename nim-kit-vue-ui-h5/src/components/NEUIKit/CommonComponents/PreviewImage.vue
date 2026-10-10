@@ -18,6 +18,10 @@
 </template>
 
 <script lang="ts" setup>
+import { onUnmounted, watch } from "vue";
+import emitter from "../utils/eventBus";
+import { events } from "../utils/constants";
+
 const props = defineProps({
   visible: {
     type: Boolean,
@@ -31,6 +35,29 @@ const props = defineProps({
     type: Function,
     default: undefined,
   },
+});
+
+let previewActive = false;
+
+watch(
+  () => props.visible,
+  (visible) => {
+    if (visible && !previewActive) {
+      previewActive = true;
+      emitter.emit(events.MESSAGE_PREVIEW_OPEN);
+    } else if (!visible && previewActive) {
+      previewActive = false;
+      emitter.emit(events.MESSAGE_PREVIEW_CLOSE);
+    }
+  },
+  { immediate: true }
+);
+
+onUnmounted(() => {
+  if (previewActive) {
+    previewActive = false;
+    emitter.emit(events.MESSAGE_PREVIEW_CLOSE);
+  }
 });
 
 const handleClose = () => {

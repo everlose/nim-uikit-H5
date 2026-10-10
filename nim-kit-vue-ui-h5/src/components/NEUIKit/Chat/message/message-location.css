@@ -1,0 +1,86 @@
+.message-location {
+  width: min(63vw, 280px);
+  overflow: hidden;
+  box-sizing: border-box;
+  border: 1px solid #dee0e2;
+  background: #fff;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.message-location-in {
+  margin-left: 8px;
+  border-radius: 0 8px 8px 8px;
+}
+
+.message-location-out {
+  margin-right: 8px;
+  border-radius: 8px 0 8px 8px;
+}
+
+.message-location-title,
+.message-location-address {
+  display: block;
+  overflow: hidden;
+  padding-right: 12px;
+  padding-left: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 20px;
+}
+
+.message-location-title {
+  padding-top: 10px;
+  color: #333;
+  font-size: 16px;
+}
+
+.message-location-address {
+  padding-bottom: 5px;
+  color: #999;
+  font-size: 12px;
+}
+
+.message-location-map {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2.5;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  pointer-events: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* 点击可查看地理位置（消息气泡内） */
+.message-location-clickable {
+  cursor: pointer;
+}
+
+/* 全屏查看（回复引用、消息气泡点击）：放宽宽度，地理标题与详细地址完整展示不截断 */
+.message-location.message-location-full {
+  width: min(80vw, 340px);
+  margin: 0;
+  border-radius: 8px;
+}
+
+.message-location-full .message-location-title,
+.message-location-full .message-location-address {
+  overflow: visible;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.message-location-full .message-location-title {
+  font-size: 17px;
+  line-height: 24px;
+}
+
+.message-location-full .message-location-address {
+  font-size: 13px;
+  line-height: 20px;
+}

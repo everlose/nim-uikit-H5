@@ -3,6 +3,8 @@ import { observer } from 'mobx-react-lite'
 import Avatar from '@/NEUIKit/common/components/Avatar'
 import MessageBubble from '@/NEUIKit/chat/message/message-bubble'
 import MessageFile from '@/NEUIKit/chat/message/message-file'
+import MessageLocation from '@/NEUIKit/chat/message/message-location'
+import MessageLocationViewer from '@/NEUIKit/chat/message/message-location-viewer'
 import MessageText from '@/NEUIKit/chat/message/message-text'
 import MessageAudio from '@/NEUIKit/chat/message/message-audio'
 import MessageNotification from '@/NEUIKit/chat/message/message-notification'
@@ -55,6 +57,15 @@ const MessageItem: React.FC<MessageItemProps> = observer(({ msg, index, replyMsg
 
   // 图片预览状态
   const [isPreviewVisible, setIsPreviewVisible] = useState(false)
+
+  // 地理位置全屏查看状态（H5 不接三方地图 SDK，只展示占位图 + 标题 + 详细地址）
+  const [isLocationViewerVisible, setIsLocationViewerVisible] = useState(false)
+
+  // 多选态下点击用于勾选消息，不打开位置查看
+  const openLocationViewer = () => {
+    if (isMultiSelecting) return
+    setIsLocationViewerVisible(true)
+  }
 
   // 回复消息
   const replyMsg = useMemo(() => {
@@ -211,11 +222,21 @@ const MessageItem: React.FC<MessageItemProps> = observer(({ msg, index, replyMsg
   const [videoPlayerUrl, setVideoPlayerUrl] = useState('')
   const [videoPlayerVisible, setVideoPlayerVisible] = useState(false)
 
+  useEffect(() => {
+    if (!videoPlayerVisible) return
+    emitter.emit(events.MESSAGE_PREVIEW_OPEN)
+    return () => {
+      emitter.emit(events.MESSAGE_PREVIEW_CLOSE)
+    }
+  }, [videoPlayerVisible])
+
   // 点击视频播放
   const handleVideoTouch = (msg: V2NIMMessageForUI) => {
     //@ts-ignore
     const url = msg.attachment?.url
     if (url) {
+      // Video opens in an overlay, so stop any audio that would otherwise continue underneath it.
+      emitter.emit(events.AUDIO_STOP_ALL)
       // 在当前页面打开视频播放 overlay，不跳转新窗口
       setVideoPlayerUrl(url)
       setVideoPlayerVisible(true)
@@ -445,12 +466,19 @@ const MessageItem: React.FC<MessageItemProps> = observer(({ msg, index, replyMsg
             {senderAvatarNode}
             <div className="msg-content">
               {showSenderName && <div className="msg-name">{senderName}</div>}
-              <MessageBubble msg={msg} tooltipVisible={true} bgVisible={true} readonly={readonly} {...bubbleMultiSelectProps}>
-                [{t('geoMsgText')}]
+              <MessageBubble msg={msg} tooltipVisible={true} bgVisible={false} readonly={readonly} {...bubbleMultiSelectProps}>
+                <MessageLocation
+                  msg={msg}
+                  isSelf={msg.isSelf}
+                  onViewLocation={isMultiSelecting ? undefined : openLocationViewer}
+                />
               </MessageBubble>
             </div>
           </div>
           {pinTipNode}
+          {isLocationViewerVisible && (
+            <MessageLocationViewer msg={msg} onClose={() => setIsLocationViewerVisible(false)} />
+          )}
         </>
       ) : msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_ROBOT ? (
         /* 机器人消息 */

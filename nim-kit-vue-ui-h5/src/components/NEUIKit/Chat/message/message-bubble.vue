@@ -566,7 +566,7 @@ const isMountedRef = ref(false);
 
 onMounted(() => {
   isMountedRef.value = true;
-  // 当前版本仅支持文本、图片、文件、语音、视频 话单消息，其他消息类型统一为未知消息
+  // 当前版本支持文本、图片、文件、语音、视频、位置和话单消息，其他消息类型统一为未知消息
   isUnknownMsg.value = !(
     props.msg.messageType ==
       V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT ||
@@ -578,6 +578,8 @@ onMounted(() => {
       V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO ||
     props.msg.messageType ==
       V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_VIDEO ||
+    props.msg.messageType ==
+      V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION ||
     props.msg.messageType == V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CALL ||
     store?.msgStore.isChatMergedForwardMsg(props.msg)
   );

@@ -21,6 +21,9 @@ import BottomPopup from '@/NEUIKit/common/components/BottomPopup'
 import ActionSheet from '@/NEUIKit/common/components/ActionSheet'
 import MentionChooseList from '../mention-choose-list'
 import { flushSync } from 'react-dom'
+import { useAudioRecorder } from '../audio-recorder/useAudioRecorder'
+import { AudioRecorderError } from '../audio-recorder/types'
+import type { AudioRecorderResult } from '../audio-recorder/types'
 
 interface MessageInputProps {
   conversationType: V2NIMConst.V2NIMConversationType
@@ -29,6 +32,13 @@ interface MessageInputProps {
     [key: string]: V2NIMMessageForUI
   }
   onSendMessage?: () => void
+}
+
+interface AudioSendContext {
+  conversationId: string
+  accountId: string
+  nim: any
+  store: any
 }
 
 /**
@@ -45,6 +55,44 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
       : nim.V2NIMConversationIdUtil.teamConversationId(to)
   }, [conversationType, to])
 
+  const inputMountedRef = useRef(false)
+  const audioSendContextRef = useRef<AudioSendContext | null>(null)
+  const audioRecordButtonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    inputMountedRef.current = true
+    return () => {
+      inputMountedRef.current = false
+      audioSendContextRef.current = null
+    }
+  }, [])
+
+  const getAudioSendContext = (): AudioSendContext => ({
+    conversationId,
+    accountId: nim.V2NIMLoginService.getLoginUser() || '',
+    nim,
+    store,
+  })
+
+  const isAudioSendContextActive = (context: AudioSendContext) => {
+    if (
+      !inputMountedRef.current ||
+      context.nim !== nim ||
+      context.store !== store ||
+      context.conversationId !== conversationId
+    ) {
+      return false
+    }
+    try {
+      return (
+        store.uiStore.selectedConversation === context.conversationId &&
+        nim.V2NIMLoginService.getLoginUser() === context.accountId
+      )
+    } catch {
+      return false
+    }
+  }
+
   // 输入文本
   const [inputText, setInputText] = useState('')
 
@@ -52,8 +100,9 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
   const [sendMoreVisible, setSendMoreVisible] = useState(false)
   // 表情面板flag
   const [emojiVisible, setEmojiVisible] = useState(false)
-  // input框flag
-  const inputVisible = useMemo(() => !sendMoreVisible, [sendMoreVisible])
+  // 语音输入模式
+  const [audioInputVisible, setAudioInputVisible] = useState(false)
+  const [isAudioCanceling, setIsAudioCanceling] = useState(false)
 
   // 用于解决表情面板和键盘冲突，导致输入框滚动消失问题
   const [showFakeInput, setShowFakeInput] = useState(false)
@@ -115,6 +164,7 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
   // 处理输入框聚焦
   const handleInputFocus = () => {
     setIsFocus(true)
+    if (audioInputVisible) closeAudioInput()
   }
 
   // 点击表情输入框，隐藏表情面板，显示键盘
@@ -144,6 +194,323 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
   const scrollBottom = () => {
     emitter.emit(events.ON_SCROLL_BOTTOM)
   }
+
+  const scrollBottomAfterRender = () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollBottom()
+      })
+    })
+  }
+
+  const getAudioErrorText = (error: AudioRecorderError) => {
+    if (error.kind === 'unsupported') return t('audioUnsupportedText')
+    if (error.kind === 'permission') return t('audioPermissionText')
+    if (error.kind === 'too_short') return t('audioTooShortText')
+    return t('audioErrorText')
+  }
+
+  const handleAudioError = (error: AudioRecorderError) => {
+    toast.info(getAudioErrorText(error))
+  }
+
+  const sendAudioMessage = async ({ file, durationMs }: AudioRecorderResult) => {
+    const sendContext = audioSendContextRef.current || getAudioSendContext()
+    if (!isAudioSendContextActive(sendContext)) {
+      audioSendContextRef.current = null
+      return
+    }
+
+    // 自动停止和手动松开都复用这里，发送时统一收起录音面板。
+    audioPressingRef.current = false
+    audioCancelingRef.current = false
+    setIsAudioCanceling(false)
+    setAudioInputVisible(false)
+    setShowFakeInput(false)
+    audioSendContextRef.current = null
+    onSendMessage?.()
+    const audioMessage = nim.V2NIMMessageCreator.createAudioMessage(
+      file,
+      file.name,
+      undefined,
+      durationMs,
+    )
+
+    try {
+      await store.msgStore.sendMessageActive({
+        msg: audioMessage as unknown as V2NIMMessage,
+        conversationId,
+        progress: () => true,
+        sendBefore: () => {
+          if (isAudioSendContextActive(sendContext)) scrollBottomAfterRender()
+        },
+      })
+    } catch (error) {
+      if (isAudioSendContextActive(sendContext)) {
+        toast.info(t('sendAudioFailedText'))
+      }
+    } finally {
+      if (isAudioSendContextActive(sendContext)) {
+        scrollBottomAfterRender()
+      }
+    }
+  }
+
+  const {
+    snapshot: audioSnapshot,
+    start: startAudio,
+    stop: stopAudio,
+    cancel: cancelAudio,
+    getSnapshot: getAudioSnapshot,
+  } = useAudioRecorder({
+    onComplete: sendAudioMessage,
+    onError: handleAudioError,
+  })
+  const audioPressingRef = useRef(false)
+  const audioCancelingRef = useRef(false)
+  const audioTouchIdRef = useRef<number | null>(null)
+  const audioSnapshotRef = useRef(audioSnapshot)
+  audioSnapshotRef.current = audioSnapshot
+
+  const audioTouchStartRef = useRef<(event: TouchEvent) => void>(() => undefined)
+  const audioTouchMoveRef = useRef<(event: TouchEvent) => void>(() => undefined)
+  const audioTouchEndRef = useRef<(event: TouchEvent) => void>(() => undefined)
+  const audioTouchCancelRef = useRef<(event: TouchEvent) => void>(() => undefined)
+
+  audioTouchStartRef.current = async (event) => {
+    const touch = event.changedTouches[0]
+    if (isTeamMute || audioPressingRef.current || !touch) return
+    event.preventDefault()
+    event.stopPropagation()
+    audioTouchIdRef.current = touch.identifier
+    audioPressingRef.current = true
+    audioCancelingRef.current = false
+    audioSendContextRef.current = getAudioSendContext()
+    setIsAudioCanceling(false)
+    try {
+      await startAudio()
+      if (!audioPressingRef.current) await cancelAudio()
+    } catch (error) {
+      const sendContext = audioSendContextRef.current
+      audioSendContextRef.current = null
+      if (
+        error instanceof AudioRecorderError &&
+        inputMountedRef.current &&
+        sendContext &&
+        isAudioSendContextActive(sendContext)
+      ) {
+        handleAudioError(error)
+      }
+    }
+  }
+
+  audioTouchMoveRef.current = (event) => {
+    if (!audioPressingRef.current) return
+    const touch = Array.from(event.touches).find(
+      (item) => item.identifier === audioTouchIdRef.current,
+    )
+    const target = audioRecordButtonRef.current
+    if (!touch || !target) return
+    event.preventDefault()
+    const rect = target.getBoundingClientRect()
+    const nextCanceling = !(
+      touch.clientX >= rect.left &&
+      touch.clientX <= rect.right &&
+      touch.clientY >= rect.top &&
+      touch.clientY <= rect.bottom
+    )
+    audioCancelingRef.current = nextCanceling
+    setIsAudioCanceling(nextCanceling)
+  }
+
+  audioTouchEndRef.current = async (event) => {
+    const touch = Array.from(event.changedTouches).find(
+      (item) => item.identifier === audioTouchIdRef.current,
+    )
+    if (!touch || !audioPressingRef.current) return
+    event.preventDefault()
+    event.stopPropagation()
+    const sendContext = audioSendContextRef.current
+    const shouldCancel =
+      audioCancelingRef.current || audioSnapshotRef.current.state !== 'recording'
+    audioTouchIdRef.current = null
+    audioPressingRef.current = false
+    audioCancelingRef.current = false
+    setIsAudioCanceling(false)
+    try {
+      if (shouldCancel) {
+        await cancelAudio()
+      } else {
+        const result = await stopAudio()
+        if (result) await sendAudioMessage(result)
+      }
+      audioSendContextRef.current = null
+    } catch (error) {
+      audioSendContextRef.current = null
+      if (
+        error instanceof AudioRecorderError &&
+        inputMountedRef.current &&
+        sendContext &&
+        isAudioSendContextActive(sendContext)
+      ) {
+        handleAudioError(error)
+      }
+    }
+  }
+
+  audioTouchCancelRef.current = async (event) => {
+    if (!audioPressingRef.current) return
+    event.preventDefault()
+    audioTouchIdRef.current = null
+    audioPressingRef.current = false
+    audioCancelingRef.current = false
+    audioSendContextRef.current = null
+    setIsAudioCanceling(false)
+    await cancelAudio()
+  }
+
+  useEffect(() => {
+    const target = audioRecordButtonRef.current
+    if (!audioInputVisible || !target) return
+    if ('PointerEvent' in window) return
+    const options = { capture: true, passive: false }
+    const onTouchStart = (event: TouchEvent) => void audioTouchStartRef.current(event)
+    const onTouchMove = (event: TouchEvent) => void audioTouchMoveRef.current(event)
+    const onTouchEnd = (event: TouchEvent) => void audioTouchEndRef.current(event)
+    const onTouchCancel = (event: TouchEvent) => void audioTouchCancelRef.current(event)
+    target.addEventListener('touchstart', onTouchStart, options)
+    document.addEventListener('touchmove', onTouchMove, options)
+    document.addEventListener('touchend', onTouchEnd, options)
+    document.addEventListener('touchcancel', onTouchCancel, options)
+    return () => {
+      target.removeEventListener('touchstart', onTouchStart, options)
+      document.removeEventListener('touchmove', onTouchMove, options)
+      document.removeEventListener('touchend', onTouchEnd, options)
+      document.removeEventListener('touchcancel', onTouchCancel, options)
+    }
+  }, [audioInputVisible])
+
+  const handleAudioPointerDown = async (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (isTeamMute) return
+    event.preventDefault()
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {}
+    audioSendContextRef.current = getAudioSendContext()
+    audioPressingRef.current = true
+    audioCancelingRef.current = false
+    setIsAudioCanceling(false)
+
+    try {
+      await startAudio()
+      if (!audioPressingRef.current) await cancelAudio()
+    } catch (error) {
+      if (error instanceof AudioRecorderError && inputMountedRef.current) {
+        handleAudioError(error)
+      }
+    }
+  }
+
+  const preventAudioNativeGesture = (event: React.SyntheticEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
+  const handleAudioPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!audioPressingRef.current) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    const inActiveArea = event.clientX >= rect.left
+      && event.clientX <= rect.right
+      && event.clientY >= rect.top
+      && event.clientY <= rect.bottom
+    audioCancelingRef.current = !inActiveArea
+    setIsAudioCanceling(audioCancelingRef.current)
+  }
+
+  const handleAudioPointerUp = async (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    const target = event.currentTarget
+    const pointerId = event.pointerId
+    const sendContext = audioSendContextRef.current
+    audioPressingRef.current = false
+    const currentAudioState = getAudioSnapshot().state
+    const shouldCancel = audioCancelingRef.current || currentAudioState !== 'recording'
+    audioCancelingRef.current = false
+    setIsAudioCanceling(false)
+
+    try {
+      if (shouldCancel) {
+        await cancelAudio()
+        audioSendContextRef.current = null
+      } else {
+        const result = await stopAudio()
+        if (result) await sendAudioMessage(result)
+        else audioSendContextRef.current = null
+      }
+    } catch (error) {
+      audioSendContextRef.current = null
+      if (
+        error instanceof AudioRecorderError &&
+        inputMountedRef.current &&
+        sendContext &&
+        isAudioSendContextActive(sendContext)
+      ) {
+        handleAudioError(error)
+      }
+    } finally {
+      if (target.hasPointerCapture(pointerId)) {
+        target.releasePointerCapture(pointerId)
+      }
+    }
+  }
+
+  const handleAudioPointerCancel = async () => {
+    audioPressingRef.current = false
+    audioCancelingRef.current = false
+    setIsAudioCanceling(false)
+    audioSendContextRef.current = null
+    await cancelAudio()
+  }
+
+  const closeAudioInput = () => {
+    const shouldCancel = audioInputVisible || audioPressingRef.current || audioSnapshot.state !== 'idle'
+    audioPressingRef.current = false
+    audioCancelingRef.current = false
+    setIsAudioCanceling(false)
+    setAudioInputVisible(false)
+    setShowFakeInput(false)
+    audioSendContextRef.current = null
+    if (shouldCancel) void cancelAudio()
+  }
+
+  const handleAudioModeToggle = () => {
+    if (isTeamMute) return
+    if (audioInputVisible) {
+      closeAudioInput()
+    } else {
+      setAudioInputVisible(true)
+      setShowFakeInput(false)
+    }
+    setEmojiVisible(false)
+    setSendMoreVisible(false)
+    scrollBottom()
+  }
+
+  useEffect(() => {
+    const cancelOnPageHidden = () => {
+      audioPressingRef.current = false
+      audioCancelingRef.current = false
+      audioSendContextRef.current = null
+      setIsAudioCanceling(false)
+      void cancelAudio()
+    }
+    document.addEventListener('visibilitychange', cancelOnPageHidden)
+    window.addEventListener('pagehide', cancelOnPageHidden)
+    return () => {
+      document.removeEventListener('visibilitychange', cancelOnPageHidden)
+      window.removeEventListener('pagehide', cancelOnPageHidden)
+    }
+  }, [cancelAudio])
 
   // 发送文本消息
   const handleSendTextMsg = () => {
@@ -250,6 +617,7 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
   const handleEmojiVisible = () => {
     if (isTeamMute) return
 
+    closeAudioInput()
     setEmojiVisible(true)
     setShowFakeInput(true)
     setSendMoreVisible(false)
@@ -291,6 +659,7 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
   const handleSendMoreVisible = () => {
     if (isTeamMute) return
 
+    closeAudioInput()
     setEmojiVisible(false)
     setSendMoreVisible((prev) => !prev)
     setShowFakeInput(true)
@@ -343,12 +712,12 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
         conversationId,
         progress: () => true,
         sendBefore: () => {
-          scrollBottom()
+          scrollBottomAfterRender()
         }
       })
-      scrollBottom()
+      scrollBottomAfterRender()
     } catch (err) {
-      scrollBottom()
+      scrollBottomAfterRender()
       toast.info(isVideo ? t('sendVideoFailedText') : t('sendImageFailedText'))
     } finally {
       if (imageInputRef.current) {
@@ -373,13 +742,13 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
         conversationId,
         progress: () => true,
         sendBefore: () => {
-          scrollBottom()
+          scrollBottomAfterRender()
         }
       })
 
-      scrollBottom()
+      scrollBottomAfterRender()
     } catch (err) {
-      scrollBottom()
+      scrollBottomAfterRender()
       toast.info(t('sendFileFailedText'))
     } finally {
       // 清空 input 的值，这样用户可以重复选择同一个文件
@@ -405,12 +774,12 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
         conversationId,
         progress: () => true,
         sendBefore: () => {
-          scrollBottom()
+          scrollBottomAfterRender()
         }
       })
-      scrollBottom()
+      scrollBottomAfterRender()
     } catch (err) {
-      scrollBottom()
+      scrollBottomAfterRender()
       toast.info(t('sendImageFailedText'))
     } finally {
       if (cameraPhotoInputRef.current) {
@@ -435,12 +804,12 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
         conversationId,
         progress: () => true,
         sendBefore: () => {
-          scrollBottom()
+          scrollBottomAfterRender()
         }
       })
-      scrollBottom()
+      scrollBottomAfterRender()
     } catch (err) {
-      scrollBottom()
+      scrollBottomAfterRender()
       toast.info(t('sendVideoFailedText'))
     } finally {
       if (cameraVideoInputRef.current) {
@@ -770,6 +1139,11 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
     const onClosePanel = () => {
       setEmojiVisible(false)
       setSendMoreVisible(false)
+      setAudioInputVisible(false)
+      setIsAudioCanceling(false)
+      audioPressingRef.current = false
+      audioSendContextRef.current = null
+      void cancelAudio()
     }
 
     const onAitTeamMember = (member: any) => {
@@ -841,46 +1215,61 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
       )}
 
       {/* 输入区域 */}
-      <div className="msg-input-wrapper">
+      <div
+        className={`msg-input-wrapper ${
+          audioSnapshot.state === 'recording' ? 'audio-recording' : ''
+        }`}
+      >
         <div className="input-inner">
-          {/*
-            当从表情面板切换到文字输入时，直接唤起键盘，会导致input框滚动消失
-            此处使用fake Input兼容，保证先隐藏表情/其他面板，再弹出键盘
-          */}
-          {showFakeInput ? (
-            <div className="fake-input" onClick={onHideFakeInput}>
-              {inputText ? (
-                <div className="input-text">{inputText}</div>
-              ) : (
-                <div className="input-placeholder">{isTeamMute ? t('teamMutePlaceholder') : t('chatInputPlaceHolder')}</div>
-              )}
-            </div>
-          ) : (
-            <Input
-              id="msg-input"
-              className="msg-input-input"
-              placeholder={isTeamMute ? t('teamMutePlaceholder') : t('chatInputPlaceHolder')}
-              value={inputText}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              disabled={isTeamMute}
-              inputStyle={{
-                padding: '0 10px'
-              }}
-              onConfirm={handleSendTextMsg}
-              onBlur={handleInputBlur}
-              onFocus={handleInputFocus}
-              ref={inputRef}
-            />
-          )}
+            {/*
+              当从表情面板切换到文字输入时，直接唤起键盘，会导致input框滚动消失
+              此处使用fake Input兼容，保证先隐藏表情/其他面板，再弹出键盘
+            */}
+            {showFakeInput ? (
+              <div className="fake-input" onClick={onHideFakeInput}>
+                {inputText ? (
+                  <div className="input-text">{inputText}</div>
+                ) : (
+                  <div className="input-placeholder">{isTeamMute ? t('teamMutePlaceholder') : t('chatInputPlaceHolder')}</div>
+                )}
+              </div>
+            ) : (
+              <Input
+                id="msg-input"
+                className="msg-input-input"
+                placeholder={isTeamMute ? t('teamMutePlaceholder') : t('chatInputPlaceHolder')}
+                value={inputText}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                disabled={isTeamMute}
+                inputStyle={{
+                  padding: '0 10px'
+                }}
+                onConfirm={handleSendTextMsg}
+                onBlur={handleInputBlur}
+                onFocus={handleInputFocus}
+                ref={inputRef}
+              />
+            )}
         </div>
 
         {/* 操作栏：四列布局，与 Android 对齐 */}
         <div className="input-action-bar">
+          <div
+            className={`input-action-icon input-action-audio ${audioInputVisible ? 'active' : ''}`}
+            onClick={handleAudioModeToggle}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') handleAudioModeToggle()
+            }}
+          >
+            <Icon size={24} type={audioInputVisible ? 'audio-btn-selected' : 'icon-audio'} />
+          </div>
           <div className="input-action-icon" onClick={handleEmojiVisible}>
             <Icon size={24} type={emojiVisible ? 'icon-emoji-active' : 'icon-emoji-normal'} />
           </div>
-          <div className="input-action-icon">
+          <div className="input-action-icon" onClick={closeAudioInput}>
             <input
               type="file"
               ref={imageInputRef}
@@ -891,11 +1280,43 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
             />
             <Icon size={24} type="icon-tupian" />
           </div>
-          <div className="input-action-icon input-action-empty" />
           <div className={`input-action-icon input-send-more ${sendMoreVisible ? 'active' : ''}`} onClick={handleSendMoreVisible}>
             <Icon type={sendMoreVisible ? 'icon-more-active' : 'icon-more-normal'} size={24} />
           </div>
         </div>
+
+        {audioInputVisible && (
+          <div
+            className={`audio-record-panel ${
+              audioSnapshot.state === 'recording' ? 'recording' : ''
+            }`}
+          >
+            <button
+              type="button"
+              className="audio-record-button"
+              onPointerDown={handleAudioPointerDown}
+              onPointerMove={handleAudioPointerMove}
+              onPointerUp={handleAudioPointerUp}
+              onPointerCancel={handleAudioPointerCancel}
+              ref={audioRecordButtonRef}
+              onDragStart={preventAudioNativeGesture}
+              onContextMenu={preventAudioNativeGesture}
+              aria-label={audioSnapshot.state === 'recording' ? t('audioRecordingHintText') : t('audioBtnText')}
+            >
+              {audioSnapshot.state === 'recording' && <span className="audio-record-ripple" aria-hidden="true" />}
+              <span className="audio-record-circle">
+                <Icon width={26} height={30} type="audio-btn" disableNativeLongPress />
+              </span>
+            </button>
+            <div className="audio-record-tip">
+              {audioSnapshot.state === 'recording' ? (
+                <span>{t('audioRecordingHintText')}</span>
+              ) : (
+                <span>{t('audioBtnText')}</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 更多操作扩展区 */}
         {sendMoreVisible && (
@@ -904,7 +1325,7 @@ const MessageInput: React.FC<MessageInputProps> = observer(({ conversationType, 
               <div className="send-more-expand-icon">
                 <Icon size={26} type="icon-paishe" />
               </div>
-              <div className="send-more-expand-label">拍摄</div>
+              <div className="send-more-expand-label">{t('shootText')}</div>
             </div>
             <div className="send-more-expand-item">
               <input

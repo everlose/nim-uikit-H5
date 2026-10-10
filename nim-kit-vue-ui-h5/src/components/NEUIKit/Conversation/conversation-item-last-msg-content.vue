@@ -80,7 +80,7 @@
         V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION
       "
     >
-      {{ translateMsg("geoMsgText") }}
+      {{ translateMsg("locationMsgText") }}
     </div>
 
     <div
@@ -207,7 +207,7 @@ const translateMsg = (key: string): string => {
       videoMsgText: t("videoMsgText"),
       fileMsgText: t("fileMsgText"),
       callMsgText: t("callMsgText"),
-      geoMsgText: t("geoMsgText"),
+      locationMsgText: t("locationMsgText"),
       imgMsgText: t("imgMsgText"),
       notiMsgText: t("notiMsgText"),
       robotMsgText: t("robotMsgText"),

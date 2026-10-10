@@ -7,6 +7,7 @@ import PreviewText from '@/NEUIKit/common/components/PreviewText'
 import MessageText from '@/NEUIKit/chat/message/message-text'
 import MessageAudio from '@/NEUIKit/chat/message/message-audio'
 import MessageFile from '@/NEUIKit/chat/message/message-file'
+import MessageLocation from '@/NEUIKit/chat/message/message-location'
 import MergedForwardModal from '@/NEUIKit/chat/message/merged-forward/modal'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
@@ -106,6 +107,14 @@ const PinMessagePreview: React.FC<PinMessagePreviewProps> = observer(({ msg }) =
     return (
       <div className="pin-message-preview-file">
         <MessageFile msg={msg} />
+      </div>
+    )
+  }
+
+  if (msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION) {
+    return (
+      <div className="pin-message-preview-location">
+        <MessageLocation msg={msg} isSelf={msg.isSelf} />
       </div>
     )
   }

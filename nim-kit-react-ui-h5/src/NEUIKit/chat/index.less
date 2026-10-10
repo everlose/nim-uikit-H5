@@ -87,8 +87,24 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1;
-    transform: rotate(90deg);
+    z-index: 20;
+    touch-action: manipulation;
+  }
+
+  .msg-anchor-latest-with-text {
+    width: auto;
+    min-width: 36px;
+    padding: 0 10px 0 8px;
+    gap: 2px;
+    right: 0;
+    border-radius: 18px 0 0 18px;
+  }
+
+  .msg-anchor-latest-text {
+    color: #1861df;
+    font-size: 14px;
+    line-height: 20px;
+    white-space: nowrap;
   }
 
   .msg-anchor-loading {

@@ -1,10 +1,52 @@
 import { ref, watch, type Ref } from "vue";
-import { autorun } from "mobx";
+import { autorun, reaction } from "mobx";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
+import type { PinInfo } from "@xkit-yx/im-store-v2/dist/types/src/pinMsgsMap";
 import { HISTORY_LIMIT } from "../../utils/constants";
 
 const ANCHOR_HISTORY_LIMIT = 10;
+
+const getMessageKey = (item: V2NIMMessageForUI) => {
+  if (item.messageClientId) return `client:${item.messageClientId}`;
+  if (item.messageServerId && item.messageServerId !== "0") {
+    return `server:${item.messageServerId}`;
+  }
+  return `local:${item.conversationId}:${item.senderId}:${item.createTime}`;
+};
+
+const isSameMessage = (left: V2NIMMessageForUI, right: V2NIMMessageForUI) => {
+  return (
+    getMessageKey(left) === getMessageKey(right) ||
+    (!!left.messageClientId && left.messageClientId === right.messageClientId) ||
+    (!!left.messageServerId &&
+      left.messageServerId !== "0" &&
+      left.messageServerId === right.messageServerId)
+  );
+};
+
+const isSendingMessage = (msg: V2NIMMessageForUI) =>
+  msg.sendingState ===
+  V2NIMConst.V2NIMMessageSendingState.V2NIM_MESSAGE_SENDING_STATE_SENDING;
+
+const getMessagesToPreserve = (
+  snapshot: V2NIMMessageForUI[],
+  current: V2NIMMessageForUI[],
+  preservedMessageClientIds: string[] = []
+) => {
+  // Keep request-time additions, pending sends, and explicitly retained local notices.
+  const snapshotKeys = new Set(snapshot.map(getMessageKey));
+  const sendingKeys = new Set(snapshot.filter(isSendingMessage).map(getMessageKey));
+  const preservedIdSet = new Set(preservedMessageClientIds);
+  return current.filter((msg) => {
+    const key = getMessageKey(msg);
+    return (
+      !snapshotKeys.has(key) ||
+      sendingKeys.has(key) ||
+      preservedIdSet.has(msg.messageClientId)
+    );
+  });
+};
 
 export interface ChatMessageLoaderOptions {
   conversationId: string;
@@ -19,11 +61,16 @@ export interface ChatMessageLoaderOptions {
 }
 
 const mergeMessages = (messages: V2NIMMessageForUI[]) => {
-  const map = new Map<string, V2NIMMessageForUI>();
+  const result: V2NIMMessageForUI[] = [];
   messages.forEach((item) => {
-    map.set(item.messageClientId, item);
+    const index = result.findIndex((existing) => isSameMessage(existing, item));
+    if (index >= 0) {
+      result[index] = item;
+    } else {
+      result.push(item);
+    }
   });
-  return [...map.values()].sort((a, b) => a.createTime - b.createTime);
+  return result.sort((a, b) => a.createTime - b.createTime);
 };
 
 export const createChatMessageLoader = ({
@@ -46,6 +93,48 @@ export const createChatMessageLoader = ({
   const hasLoadedInitial = ref(false);
   let prevLoginStatus = loginStatus.value;
   let canceled = false;
+  let requestGeneration = 0;
+  let loadingOlderOwner: number | null = null;
+
+  const beginLoadingOlder = (generation: number) => {
+    if (loadingOlder.value && loadingOlderOwner !== generation) {
+      loadingOlderOwner = null;
+      loadingOlder.value = false;
+    }
+    if (loadingOlder.value) return false;
+    loadingOlderOwner = generation;
+    loadingOlder.value = true;
+    return true;
+  };
+
+  const endLoadingOlder = (generation: number) => {
+    if (loadingOlderOwner !== generation) return;
+    loadingOlderOwner = null;
+    loadingOlder.value = false;
+  };
+
+  const isCurrentRequest = (context: {
+    generation: number;
+    conversationId: string;
+    nim: any;
+    store: any;
+    accountId: string;
+    loginStatus: V2NIMConst.V2NIMLoginStatus;
+  }) => {
+    try {
+      return (
+        !canceled &&
+        context.generation === requestGeneration &&
+        context.conversationId === conversationId &&
+        context.nim === nim &&
+        context.store === store &&
+        context.loginStatus === loginStatus.value &&
+        context.accountId === context.nim.V2NIMLoginService.getLoginUser()
+      );
+    } catch {
+      return false;
+    }
+  };
 
   const normalizeHistoryMsgs = (messages: V2NIMMessageForUI[]) => {
     const pinMap = store.msgStore.pinMsgs.map.get(conversationId);
@@ -160,6 +249,22 @@ export const createChatMessageLoader = ({
       };
     });
 
+    const currentMsgMap = new Map<string, V2NIMMessageForUI>(
+      currentMsgs.map((msg: V2NIMMessageForUI) => [msg.messageClientId, msg])
+    );
+    nextMsgs.forEach((msg: V2NIMMessageForUI) => {
+      const currentMsg = currentMsgMap.get(msg.messageClientId);
+      if (
+        currentMsg?.pinState !== msg.pinState ||
+        currentMsg?.operatorId !== msg.operatorId
+      ) {
+        store.msgStore.updateMsg(conversationId, msg.messageClientId, {
+          pinState: msg.pinState,
+          operatorId: msg.operatorId,
+        });
+      }
+    });
+
     if (!anchorMode.value) {
       msgs.value = nextMsgs;
       return;
@@ -175,16 +280,68 @@ export const createChatMessageLoader = ({
 
   const syncPinnedMessageList = async (forceUpdate = false) => {
     if (!conversationId) {
-      return;
+      return false;
     }
+    const currentRequestGeneration = ++requestGeneration;
+    const requestConversationId = conversationId;
+    const requestNim = nim;
+    const requestStore = store;
+    const requestAccountId = nim.V2NIMLoginService.getLoginUser();
+    const requestLoginStatus = loginStatus.value;
+    const requestContext = {
+      generation: currentRequestGeneration,
+      conversationId: requestConversationId,
+      nim: requestNim,
+      store: requestStore,
+      accountId: requestAccountId,
+      loginStatus: requestLoginStatus,
+    };
+
     try {
-      await store.msgStore.getPinnedMessageListActive(
-        conversationId,
-        forceUpdate
-      );
+      const cachedPinMap = requestStore.msgStore.pinMsgs.map.get(requestConversationId);
+      let pinInfos: PinInfo[] = cachedPinMap && !forceUpdate
+        ? (Array.from(cachedPinMap.values()) as PinInfo[])
+        : ((await requestNim.V2NIMMessageService.getPinnedMessageList(requestConversationId)) || []).map((pin: any) => ({
+            ...pin,
+            pinState: 1,
+          }));
+      let shouldWritePinMap = forceUpdate || !cachedPinMap;
+      const missingMessageRefers = pinInfos
+        .filter((pinInfo) => !pinInfo.message)
+        .map((pinInfo) => pinInfo.messageRefer);
+
+      if (missingMessageRefers.length) {
+        try {
+          const messages = (await requestNim.V2NIMMessageService.getMessageListByRefers(
+            missingMessageRefers
+          )) || [];
+          const messageMap = new Map<string, V2NIMMessageForUI>(
+            (messages || []).map(
+              (message: any) =>
+                [message.messageClientId, message] as [string, V2NIMMessageForUI]
+            )
+          );
+          pinInfos = pinInfos.map((pinInfo) => {
+            const message = messageMap.get(pinInfo.messageRefer.messageClientId);
+            return message ? { ...pinInfo, message } : pinInfo;
+          });
+          shouldWritePinMap = shouldWritePinMap || messages.length > 0;
+        } catch (error) {
+          console.error("Get pinned message details failed", error);
+        }
+      }
+
+      if (!isCurrentRequest(requestContext)) return false;
+
+      if (shouldWritePinMap) {
+        requestStore.msgStore.pinMsgs.clear(requestConversationId);
+        requestStore.msgStore.pinMsgs.set(requestConversationId, pinInfos);
+      }
       refreshLocalPinState();
+      return true;
     } catch (error) {
       console.error("Get pinned message list failed", error);
+      return isCurrentRequest(requestContext);
     }
   };
 
@@ -218,36 +375,83 @@ export const createChatMessageLoader = ({
     return undefined;
   };
 
-  const loadLatestHistory = async () => {
-    if (!conversationId || loadingOlder.value) {
+  const loadLatestHistory = async (
+    resetLocalMessages = false,
+    preservedMessageClientIds: string[] = []
+  ) => {
+    if (!conversationId) {
       return [];
     }
-    loadingOlder.value = true;
+    const currentRequestGeneration = ++requestGeneration;
+    const requestConversationId = conversationId;
+    const requestNim = nim;
+    const requestStore = store;
+    const requestAccountId = nim.V2NIMLoginService.getLoginUser();
+    const requestLoginStatus = loginStatus.value;
+    const snapshot = resetLocalMessages
+      ? (store.msgStore.getMsg(conversationId) || [])
+      : [];
+    if (!beginLoadingOlder(currentRequestGeneration)) return [];
     try {
-      const historyMsgs = await store.msgStore.getHistoryMsgActive({
+      const historyMsgs = await nim.V2NIMMessageService.getMessageList({
         conversationId,
         endTime: Date.now(),
         limit: HISTORY_LIMIT,
       });
+      if (!isCurrentRequest({
+        generation: currentRequestGeneration,
+        conversationId: requestConversationId,
+        nim: requestNim,
+        store: requestStore,
+        accountId: requestAccountId,
+        loginStatus: requestLoginStatus,
+      })) {
+        return [];
+      }
+
       const normalizedMsgs = normalizeHistoryMsgs(historyMsgs || []);
+
       hasOlder.value = normalizedMsgs.length >= HISTORY_LIMIT;
       hasNewer.value = false;
       anchorMode.value = false;
       hasLoadedLatest.value = true;
       showLatestHint.value = false;
-      msgs.value = store.msgStore.getMsg(conversationId) || normalizedMsgs;
+      if (resetLocalMessages) {
+        const currentMessages = store.msgStore.getMsg(conversationId) || [];
+        const messagesToPreserve = getMessagesToPreserve(
+          snapshot,
+          currentMessages,
+          preservedMessageClientIds
+        );
+        const nextMessages = mergeMessages([
+          ...normalizedMsgs,
+          ...messagesToPreserve,
+        ]);
+        store.msgStore.removeMsg(conversationId);
+        store.msgStore.addMsg(conversationId, nextMessages);
+        msgs.value = nextMessages;
+      } else {
+        store.msgStore.addMsg(conversationId, normalizedMsgs);
+        msgs.value = store.msgStore.getMsg(conversationId) || normalizedMsgs;
+      }
       await notifyHistoryMessagesLoaded(normalizedMsgs);
       return normalizedMsgs;
     } finally {
-      loadingOlder.value = false;
+      endLoadingOlder(currentRequestGeneration);
     }
   };
 
   const loadAnchorHistory = async () => {
-    if (!anchorMessageClientId || !conversationId || loadingOlder.value) {
+    if (!anchorMessageClientId || !conversationId) {
       return false;
     }
-    loadingOlder.value = true;
+    const currentRequestGeneration = ++requestGeneration;
+    const requestConversationId = conversationId;
+    const requestNim = nim;
+    const requestStore = store;
+    const requestAccountId = nim.V2NIMLoginService.getLoginUser();
+    const requestLoginStatus = loginStatus.value;
+    if (!beginLoadingOlder(currentRequestGeneration)) return false;
     try {
       const anchorMessage = await getAnchorMessage();
       if (!anchorMessage) {
@@ -269,6 +473,16 @@ export const createChatMessageLoader = ({
           limit: ANCHOR_HISTORY_LIMIT,
         }),
       ]);
+      if (!isCurrentRequest({
+        generation: currentRequestGeneration,
+        conversationId: requestConversationId,
+        nim: requestNim,
+        store: requestStore,
+        accountId: requestAccountId,
+        loginStatus: requestLoginStatus,
+      })) {
+        return false;
+      }
 
       const normalizedMsgs = normalizeHistoryMsgs([
         ...(beforeMsgs || []),
@@ -283,23 +497,28 @@ export const createChatMessageLoader = ({
       store.msgStore.addMsg(conversationId, mergedMsgs);
       msgs.value = mergedMsgs;
       hasOlder.value = (beforeMsgs || []).length >= ANCHOR_HISTORY_LIMIT;
-      hasNewer.value =
-        !hasLoadedLatestNow && (afterMsgs || []).length >= ANCHOR_HISTORY_LIMIT;
+      hasNewer.value = !hasLoadedLatestNow;
       anchorMode.value = true;
       hasLoadedLatest.value = hasLoadedLatestNow;
       showLatestHint.value = false;
       await notifyHistoryMessagesLoaded(mergedMsgs);
       return true;
     } finally {
-      loadingOlder.value = false;
+      endLoadingOlder(currentRequestGeneration);
     }
   };
 
   const loadOlder = async (firstMsg?: V2NIMMessageForUI) => {
-    if (!conversationId || loadingOlder.value || !hasOlder.value) {
+    if (!conversationId || !hasOlder.value) {
       return [];
     }
-    loadingOlder.value = true;
+    const currentRequestGeneration = ++requestGeneration;
+    const requestConversationId = conversationId;
+    const requestNim = nim;
+    const requestStore = store;
+    const requestAccountId = nim.V2NIMLoginService.getLoginUser();
+    const requestLoginStatus = loginStatus.value;
+    if (!beginLoadingOlder(currentRequestGeneration)) return [];
     try {
       let historyMsgs: V2NIMMessageForUI[] = [];
       if (anchorMode.value && firstMsg) {
@@ -312,14 +531,25 @@ export const createChatMessageLoader = ({
             limit: HISTORY_LIMIT,
           })) || [];
       } else {
-        historyMsgs =
-          (await store.msgStore.getHistoryMsgActive({
-            conversationId,
-            endTime: firstMsg?.createTime || Date.now(),
-            lastMsgId: firstMsg?.messageServerId,
-            limit: HISTORY_LIMIT,
-          })) || [];
+        const anchorMessage = firstMsg?.messageClientId
+          ? store.msgStore.getMsg(conversationId, [firstMsg.messageClientId])?.[0] || firstMsg
+          : undefined;
+        historyMsgs = (await nim.V2NIMMessageService.getMessageList({
+          conversationId,
+          endTime: firstMsg?.createTime || Date.now(),
+          anchorMessage: anchorMessage as any,
+          limit: HISTORY_LIMIT,
+        })) || [];
       }
+
+      if (!isCurrentRequest({
+        generation: currentRequestGeneration,
+        conversationId: requestConversationId,
+        nim: requestNim,
+        store: requestStore,
+        accountId: requestAccountId,
+        loginStatus: requestLoginStatus,
+      })) return [];
 
       const normalizedMsgs = normalizeHistoryMsgs(historyMsgs);
       hasOlder.value = normalizedMsgs.length >= HISTORY_LIMIT;
@@ -330,7 +560,7 @@ export const createChatMessageLoader = ({
       }
       return normalizedMsgs;
     } finally {
-      loadingOlder.value = false;
+      endLoadingOlder(currentRequestGeneration);
     }
   };
 
@@ -343,6 +573,12 @@ export const createChatMessageLoader = ({
     ) {
       return [];
     }
+    const currentRequestGeneration = ++requestGeneration;
+    const requestConversationId = conversationId;
+    const requestNim = nim;
+    const requestStore = store;
+    const requestAccountId = nim.V2NIMLoginService.getLoginUser();
+    const requestLoginStatus = loginStatus.value;
     loadingNewer.value = true;
     try {
       const newerMsgs =
@@ -352,6 +588,15 @@ export const createChatMessageLoader = ({
           direction: V2NIMConst.V2NIMQueryDirection.V2NIM_QUERY_DIRECTION_ASC,
           limit: HISTORY_LIMIT,
         })) || [];
+      if (!isCurrentRequest({
+        generation: currentRequestGeneration,
+        conversationId: requestConversationId,
+        nim: requestNim,
+        store: requestStore,
+        accountId: requestAccountId,
+        loginStatus: requestLoginStatus,
+      })) return [];
+
       const normalizedMsgs = normalizeHistoryMsgs(newerMsgs);
 
       if (normalizedMsgs.length) {
@@ -372,10 +617,10 @@ export const createChatMessageLoader = ({
     }
   };
 
-  const switchToLatest = async () => {
+  const switchToLatest = async (preservedMessageClientIds: string[] = []) => {
     loadingNewer.value = true;
     try {
-      return await loadLatestHistory();
+      return await loadLatestHistory(true, preservedMessageClientIds);
     } finally {
       loadingNewer.value = false;
     }
@@ -431,25 +676,30 @@ export const createChatMessageLoader = ({
     msgs.value = storeMsgs;
   });
 
-  const pinDispose = autorun(() => {
-    if (!conversationId) {
-      return;
-    }
-    const pinMap = store.msgStore.pinMsgs.map.get(conversationId);
-    if (pinMap) {
-      [...pinMap.values()]
-        .map((pinInfo: any) =>
-          [
-            pinInfo.messageRefer?.messageClientId,
-            pinInfo.pinState,
-            pinInfo.operatorId,
-            pinInfo.updateTime,
-          ].join(":")
-        )
-        .join("|");
-    }
-    refreshLocalPinState();
-  });
+  const pinDispose = reaction(
+    () => {
+      if (!conversationId) {
+        return "";
+      }
+      const pinMap = store.msgStore.pinMsgs.map.get(conversationId);
+      return pinMap
+        ? [...pinMap.values()]
+            .map((pinInfo: any) =>
+              [
+                pinInfo.messageRefer?.messageClientId,
+                pinInfo.pinState,
+                pinInfo.operatorId,
+                pinInfo.updateTime,
+              ].join(":")
+            )
+            .join("|")
+        : "";
+    },
+    () => {
+      refreshLocalPinState();
+    },
+    { fireImmediately: true }
+  );
 
   const stopLoginWatch = watch(
     loginStatus,
@@ -470,7 +720,12 @@ export const createChatMessageLoader = ({
           hasLoadedInitial.value &&
           prevLoginStatus !==
             V2NIMConst.V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINED;
-        await syncPinnedMessageList(forceUpdatePinList);
+        const pinnedMessagesSynced = await syncPinnedMessageList(
+          forceUpdatePinList
+        );
+        if (canceled || !pinnedMessagesSynced) {
+          return;
+        }
         const loadedAnchor = anchorMessageClientId
           ? await loadAnchorHistory()
           : false;
@@ -499,6 +754,7 @@ export const createChatMessageLoader = ({
 
   const dispose = () => {
     canceled = true;
+    requestGeneration += 1;
     msgDispose();
     pinDispose();
     stopLoginWatch();

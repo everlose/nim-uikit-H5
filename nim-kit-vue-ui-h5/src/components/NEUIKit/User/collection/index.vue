@@ -91,6 +91,16 @@
             <MessageFile :msg="item.msg" />
           </div>
           <div
+            v-else-if="
+              item.msg.messageType ===
+              V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION
+            "
+            class="collection-location-preview"
+            @click.stop
+          >
+            <MessageLocation :msg="item.msg" :is-self="item.msg.isSelf" />
+          </div>
+          <div
             v-else-if="isMergedForward(item.msg)"
             class="collection-merged-card"
           >
@@ -208,9 +218,11 @@ import MessageForward from "../../Chat/message/message-forward.vue";
 import MessageText from "../../Chat/message/message-text.vue";
 import MessageAudio from "../../Chat/message/message-audio.vue";
 import MessageFile from "../../Chat/message/message-file.vue";
+import MessageLocation from "../../Chat/message/message-location.vue";
 import MergedForwardModal from "../../Chat/message/merged-forward/modal.vue";
 import { t } from "../../utils/i18n";
 import { copyText } from "../../utils";
+import { buildFileDownloadUrl } from "../../utils/file";
 import { showModal } from "../../utils/modal";
 import { showToast } from "../../utils/toast";
 import { getMsgContentTipByType } from "../../utils/msg";
@@ -305,14 +317,11 @@ const getVideoFirstFrameUrl = (msg?: V2NIMMessageForUI) => {
 
 const getFileDownloadUrl = (msg: V2NIMMessageForUI) => {
   const attachment = msg.attachment as V2NIMMessageFileAttachment | undefined;
-  const url = attachment?.url || "";
-  if (!url) {
-    return "";
-  }
-  const name = attachment?.name || "";
-  return `${url}${url.includes("?") ? "&" : "?"}download=${encodeURIComponent(
-    name
-  )}`;
+  return buildFileDownloadUrl(
+    attachment?.url || "",
+    attachment?.name || "",
+    attachment?.ext || ""
+  );
 };
 
 const getConversationTargetId = (msg: V2NIMMessageForUI) => {
@@ -771,6 +780,12 @@ onMounted(() => {
 
 .collection-audio-preview {
   display: inline-block;
+}
+
+.collection-location-preview :deep(.message-location) {
+  margin-left: 0;
+  margin-right: 0;
+  max-width: 100%;
 }
 
 .collection-audio-preview .msg-bg {

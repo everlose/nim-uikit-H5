@@ -60,6 +60,12 @@
     <MessageFile :msg="msg" />
   </div>
   <div
+    v-else-if="msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION"
+    class="pin-message-preview-location"
+  >
+    <MessageLocation :msg="msg" :is-self="msg.isSelf" />
+  </div>
+  <div
     v-else-if="mergedForwardPayload"
     class="pin-message-preview-merged-card"
     @click="openMergedForward"
@@ -94,6 +100,7 @@ import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/type
 import MessageText from "./message/message-text.vue";
 import MessageAudio from "./message/message-audio.vue";
 import MessageFile from "./message/message-file.vue";
+import MessageLocation from "./message/message-location.vue";
 import PreviewImage from "../CommonComponents/PreviewImage.vue";
 import PreviewText from "../CommonComponents/PreviewText.vue";
 import MergedForwardModal from "./message/merged-forward/modal.vue";

@@ -28,6 +28,7 @@
       </svg>{{ t("securityTipText") }}<span class="security-tip-report" @click="handleReportClick">{{ t("reportText") }}</span>
     </div>
     <MessageList
+      ref="messageListComponentRef"
       :conversationType="conversationType"
       :to="to"
       :msgs="msgs"
@@ -42,23 +43,30 @@
       :auto-scroll-to-bottom="!anchorMode"
       :on-load-older="loadOlder"
       :on-load-newer="loadNewer"
+      :on-latest-visibility-change="handleLatestVisibilityChange"
       :is-multi-selecting="isMultiSelecting"
+      :is-scroll-locked="previewDepth > 0"
       :selected-message-ids="selectedMessageIds"
       :on-toggle-select="toggleSelectMessage"
       :on-multi-select="enterMultiSelect"
     />
     <div
-      v-if="anchorMode && (hasNewer || showLatestHint)"
+      v-if="
+        !isMultiSelecting &&
+        (anchorMode
+          ? hasNewer || showLatestHint || showBackToLatest
+          : showBackToLatest || newMessageCount > 0)
+      "
       class="msg-anchor-latest"
-      @click="backToLatestMsgs"
+      :class="{ 'msg-anchor-latest-with-text': newMessageCount > 0 }"
+      @pointerdown.stop
+      @touchstart.stop
+      @click.stop.prevent="backToLatestMsgs"
     >
-      <Icon
-        v-if="loadingNewer"
-        type="icon-a-Frame8"
-        :size="20"
-        iconClassName="msg-anchor-loading"
-      />
-      <Icon v-else type="icon-jiantou" :size="20" />
+      <Icon type="icon-chat-message-arrow-bottom" :size="16" />
+      <span v-if="newMessageCount > 0" class="msg-anchor-latest-text">
+        {{ newMessageCountText }}
+      </span>
     </div>
     <div v-if="isMultiSelecting" class="msg-multi-action-bar">
       <div
@@ -130,7 +138,10 @@ import MessageList from "./message/message-list.vue";
 import MessageInput from "./message/message-input.vue";
 import MessageForward from "./message/message-forward.vue";
 import { t } from "../utils/i18n";
-import type { V2NIMMessage } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
+import type {
+  V2NIMMessage,
+  V2NIMMessageRevokeNotification,
+} from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import type { V2NIMConversationType } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMConversationService";
 import { useRouter } from "vue-router";
@@ -168,6 +179,17 @@ export interface YxReplyMsg {
   idServer: string;
   time: number;
 }
+
+const getNewMessageReminderKey = (message: {
+  messageClientId?: string;
+  messageServerId?: string;
+}) => {
+  if (message.messageClientId) return `client:${message.messageClientId}`;
+  if (message.messageServerId && message.messageServerId !== "0") {
+    return `server:${message.messageServerId}`;
+  }
+  return "";
+};
 
 const title = ref("");
 const subTitle = ref("");
@@ -210,10 +232,40 @@ const p2pMsgReceiptVisible = store?.localOptions.p2pMsgReceiptVisible;
 /**回复消息map，用于回复消息的解析处理 */
 const replyMsgsMap = ref<Record<string, V2NIMMessage>>();
 const isMultiSelecting = ref(false);
+type MessageListScrollSnapshot = {
+  anchorMessageClientId: string;
+  anchorOffsetTop: number;
+  scrollTop: number;
+};
+const messageListComponentRef = ref<{
+  captureScrollPosition: () => MessageListScrollSnapshot | null;
+  restoreScrollPosition: (snapshot: MessageListScrollSnapshot | null) => void;
+} | null>(null);
+const multiSelectScrollSnapshot = ref<MessageListScrollSnapshot | null>(null);
+const previewDepth = ref(0);
+const previewScrollSnapshot = ref<MessageListScrollSnapshot | null>(null);
 const selectedMessageIds = ref<string[]>([]);
 const multiForwardMsgs = ref<V2NIMMessageForUI[]>([]);
 const forwardVisible = ref(false);
 const forwardMode = ref<"oneByOne" | "merged">("oneByOne");
+
+const handlePreviewOpen = () => {
+  if (previewDepth.value === 0) {
+    previewScrollSnapshot.value =
+      messageListComponentRef.value?.captureScrollPosition() || null;
+  }
+  previewDepth.value += 1;
+};
+
+const handlePreviewClose = () => {
+  if (previewDepth.value === 0) return;
+  previewDepth.value -= 1;
+  if (previewDepth.value !== 0) return;
+
+  const snapshot = previewScrollSnapshot.value;
+  previewScrollSnapshot.value = null;
+  messageListComponentRef.value?.restoreScrollPosition(snapshot);
+};
 
 /** 语音转文字结果map，在进入会话列表前保留在内存中 */
 const voiceTextMap = ref<Record<string, string>>(
@@ -229,11 +281,19 @@ const exitMultiSelect = () => {
   selectedMessageIds.value = [];
   multiForwardMsgs.value = [];
   forwardVisible.value = false;
+  messageListComponentRef.value?.restoreScrollPosition(
+    multiSelectScrollSnapshot.value
+  );
+  multiSelectScrollSnapshot.value = null;
 };
 
 const enterMultiSelect = (msg: V2NIMMessageForUI) => {
   if (!isSelectableMessage(msg)) {
     return;
+  }
+  if (!isMultiSelecting.value) {
+    multiSelectScrollSnapshot.value =
+      messageListComponentRef.value?.captureScrollPosition() || null;
   }
   isMultiSelecting.value = true;
   selectedMessageIds.value = [getMessageSelectKey(msg)];
@@ -380,6 +440,39 @@ const {
   switchToLatest,
 } = loader;
 
+const showBackToLatest = ref(false);
+const newMessageCount = ref(0);
+// 视口是否真的在消息列表底部。新消息提醒的“保持位置”与“清空计数”都以此为准，
+// 不能再依赖会随消息内容变化的按钮显隐。
+const latestAtBottom = ref(true);
+const pendingNewMessageKeys = new Set<string>();
+const recalledNewMessageIds = new Set<string>();
+const syncNewMessageCount = () => {
+  newMessageCount.value = pendingNewMessageKeys.size;
+};
+const clearNewMessageReminder = () => {
+  pendingNewMessageKeys.clear();
+  syncNewMessageCount();
+};
+const handleLatestVisibilityChange = (show: boolean, atLatest?: boolean) => {
+  if (typeof atLatest === "boolean") {
+    latestAtBottom.value = atLatest;
+  }
+  showBackToLatest.value = show;
+  // 只有真的滚到列表底部才清空新消息提醒：
+  // atLatest 只取决于滚动位置，不会被撤回等消息内容变化影响，避免误清未读计数。
+  if (
+    atLatest === true &&
+    !isMultiSelecting.value &&
+    previewDepth.value === 0 &&
+    (!anchorMode.value || (!hasNewer.value && !showLatestHint.value))
+  ) {
+    clearNewMessageReminder();
+  }
+};
+const newMessageCountText = computed(() =>
+  t("newMessagesText").replace("%d", String(newMessageCount.value))
+);
 /** 进入聊天页面时，首次加载完成后自动滚动到底部 */
 const initialScrollKey = ref("");
 watch(
@@ -550,8 +643,21 @@ const backToConversation = () => {
 };
 
 const backToLatestMsgs = async () => {
+  showBackToLatest.value = false;
+  latestAtBottom.value = true;
+  clearNewMessageReminder();
+
+  if (!anchorMode.value) {
+    recalledNewMessageIds.clear();
+    requestAnimationFrame(() => {
+      emitter.emit(events.ON_SCROLL_BOTTOM);
+    });
+    return;
+  }
+
   await router.replace(`${neUiKitRouterPath.chat}?conversationId=${conversationId}`);
-  await switchToLatest();
+  await switchToLatest([...recalledNewMessageIds]);
+  recalledNewMessageIds.clear();
   setTimeout(() => {
     emitter.emit(events.ON_SCROLL_BOTTOM);
   }, 0);
@@ -642,7 +748,32 @@ const onReceiveMessages = (newMsgs: V2NIMMessage[]) => {
     handleMsgReceipt(newMsgs);
   }
 
-  if (loader.handleIncomingMessages(newMsgs as V2NIMMessageForUI[])) {
+  const myUserAccountId = nim.V2NIMLoginService.getLoginUser();
+  const receivedMessages = newMsgs.filter(
+    (message) =>
+      message.conversationId === conversationId &&
+      !message.isSelf &&
+      message.senderId !== myUserAccountId
+  );
+  const shouldKeepPosition =
+    isMultiSelecting.value ||
+    previewDepth.value > 0 ||
+    newMessageCount.value > 0 ||
+    anchorMode.value ||
+    !latestAtBottom.value ||
+    showBackToLatest.value;
+  if (shouldKeepPosition && receivedMessages.length > 0) {
+    receivedMessages.forEach((message) => {
+      const key = getNewMessageReminderKey(message);
+      if (key) pendingNewMessageKeys.add(key);
+    });
+    syncNewMessageCount();
+  }
+
+  if (
+    loader.handleIncomingMessages(newMsgs as V2NIMMessageForUI[]) &&
+    !shouldKeepPosition
+  ) {
     // 双 rAF 确保 Vue 重渲染 + 浏览器 layout 完成后再滚动
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -650,6 +781,21 @@ const onReceiveMessages = (newMsgs: V2NIMMessage[]) => {
       })
     })
   }
+};
+
+const onMessageRevokeNotifications = (
+  notifications: V2NIMMessageRevokeNotification[]
+) => {
+  let changed = false;
+  notifications.forEach(({ messageRefer }) => {
+    if (messageRefer.conversationId !== conversationId) return;
+    const key = getNewMessageReminderKey(messageRefer);
+    if (key && pendingNewMessageKeys.delete(key)) {
+      recalledNewMessageIds.add(`recall-${messageRefer.messageClientId}`);
+      changed = true;
+    }
+  });
+  if (changed) syncNewMessageCount();
 };
 
 /** 监听当前聊天页面的会话类型 */
@@ -853,12 +999,19 @@ const setNavTitle = () => {
 onMounted(() => {
   setNavTitle();
 
+  emitter.on(events.MESSAGE_PREVIEW_OPEN, handlePreviewOpen);
+  emitter.on(events.MESSAGE_PREVIEW_CLOSE, handlePreviewClose);
+
   if (msgs.value.length) {
     const _msgs = [...msgs.value].reverse();
     handleHistoryMsgReceipt(_msgs as V2NIMMessage[]);
   }
 
   nim.V2NIMMessageService.on("onReceiveMessages", onReceiveMessages as any);
+  nim.V2NIMMessageService.on(
+    "onMessageRevokeNotifications",
+    onMessageRevokeNotifications
+  );
   nim.V2NIMTeamService.on("onTeamDismissed", onTeamDismissed);
   nim.V2NIMTeamService.on("onTeamLeft", onTeamLeft);
 });
@@ -870,6 +1023,16 @@ onUnmounted(() => {
   nim.V2NIMTeamService.off("onTeamDismissed", onTeamDismissed);
   nim.V2NIMTeamService.off("onTeamLeft", onTeamLeft);
   nim.V2NIMMessageService.off("onReceiveMessages", onReceiveMessages as any);
+  nim.V2NIMMessageService.off(
+    "onMessageRevokeNotifications",
+    onMessageRevokeNotifications
+  );
+  pendingNewMessageKeys.clear();
+  recalledNewMessageIds.clear();
+  emitter.off(events.MESSAGE_PREVIEW_OPEN, handlePreviewOpen);
+  emitter.off(events.MESSAGE_PREVIEW_CLOSE, handlePreviewClose);
+  previewDepth.value = 0;
+  previewScrollSnapshot.value = null;
 
   stopMsgsWatch();
   conversationTypeWatch();
@@ -961,8 +1124,24 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  transform: rotate(90deg);
-  z-index: 1;
+  z-index: 20;
+  touch-action: manipulation;
+}
+
+.msg-anchor-latest-with-text {
+  width: auto;
+  min-width: 38px;
+  padding: 0 10px 0 8px;
+  gap: 2px;
+  right: 0;
+  border-radius: 19px 0 0 19px;
+}
+
+.msg-anchor-latest-text {
+  color: #1861df;
+  font-size: 14px;
+  line-height: 20px;
+  white-space: nowrap;
 }
 
 .msg-anchor-loading {

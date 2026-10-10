@@ -6,10 +6,16 @@
       @click="togglePlay"
     >
       <div class="audio-dur">{{ duration }}s</div>
-      <div class="audio-icon-wrapper">
-        <Icon :size="24" :key="audioIconType" :type="audioIconType" />
+      <div class="audio-icon-wrapper" @contextmenu.prevent>
+        <Icon
+          :size="24"
+          :key="audioIconType"
+          :type="audioIconType"
+          :disable-native-long-press="true"
+        />
       </div>
       <audio
+        v-if="audioSrc"
         :src="audioSrc"
         ref="audioRef"
         @play="onAudioPlay"
@@ -102,6 +108,9 @@ function onAudioPlay() {
 }
 
 function onAudioStop() {
+  if (audioRef.value) {
+    audioRef.value.currentTime = 0;
+  }
   animationFlag.value = false;
   isAudioPlaying.value = false;
 }
@@ -172,6 +181,7 @@ onMounted(() => {
   emitter.on(events.AUDIO_PLAY_CHANGE, handleAudioPlayChange);
   emitter.on(events.AUDIO_STOP_ALL, stopAudio);
   document.addEventListener("visibilitychange", handleVisibilityChange);
+  window.addEventListener("pagehide", stopAudio);
 });
 
 // 组件卸载时停止播放
@@ -179,6 +189,7 @@ onUnmounted(() => {
   emitter.off(events.AUDIO_PLAY_CHANGE, handleAudioPlayChange);
   emitter.off(events.AUDIO_STOP_ALL, stopAudio);
   document.removeEventListener("visibilitychange", handleVisibilityChange);
+  window.removeEventListener("pagehide", stopAudio);
   stopAudio();
 });
 </script>
@@ -210,6 +221,13 @@ onUnmounted(() => {
   height: 24px;
   display: flex;
   align-items: center;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.audio-icon-wrapper .icon-wrapper {
+  pointer-events: none;
 }
 
 .message-audio-container {

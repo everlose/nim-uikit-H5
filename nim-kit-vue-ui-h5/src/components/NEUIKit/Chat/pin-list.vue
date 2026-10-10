@@ -397,6 +397,12 @@ onUnmounted(() => {
   cursor: default;
 }
 
+.pin-message-preview-location :deep(.message-location) {
+  margin-left: 0;
+  margin-right: 0;
+  max-width: 100%;
+}
+
 .pin-list-more {
   width: 32px;
   height: 32px;

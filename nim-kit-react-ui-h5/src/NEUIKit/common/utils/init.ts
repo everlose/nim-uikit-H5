@@ -28,7 +28,7 @@ export const init = () => {
     {
       appkey: "3e215d27b6a6a9e27dad7ef36dd5b65c",
       needReconnect: true,
-      debugLevel: "debug",
+      debugLevel: "log",
       apiVersion: "v2",
       enableV2CloudConversation: enableV2CloudConversation,
     },
