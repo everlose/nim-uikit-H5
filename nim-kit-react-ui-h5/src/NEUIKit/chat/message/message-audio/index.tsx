@@ -82,6 +82,9 @@ const MessageAudio: React.FC<MessageAudioProps> = observer(({ msg, mode, broadca
   }
 
   const onAudioStop = () => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0
+    }
     animationFlagRef.current = false
     setIsAudioPlaying(false)
   }
@@ -173,8 +176,10 @@ const MessageAudio: React.FC<MessageAudioProps> = observer(({ msg, mode, broadca
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('pagehide', stopAudio)
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('pagehide', stopAudio)
     }
   }, [msg.messageClientId])
 
@@ -184,10 +189,12 @@ const MessageAudio: React.FC<MessageAudioProps> = observer(({ msg, mode, broadca
     <div className="message-audio-container">
       <div className={containerClass} style={{ width: audioContainerWidth + 'px' }} onClick={togglePlay}>
         <div className="audio-dur">{duration}s</div>
-        <div className="audio-icon-wrapper">
-          <Icon size={24} type={audioIconType} />
+        <div className="audio-icon-wrapper" onContextMenu={(event) => event.preventDefault()}>
+          <Icon size={24} type={audioIconType} disableNativeLongPress />
         </div>
-        <audio src={audioSrc} ref={audioRef} onPlay={onAudioPlay} onPause={onAudioStop} onEnded={onAudioEnded} onError={onAudioError} />
+        {audioSrc && (
+          <audio src={audioSrc} ref={audioRef} onPlay={onAudioPlay} onPause={onAudioStop} onEnded={onAudioEnded} onError={onAudioError} />
+        )}
       </div>
       {voiceText && (
         <div className="voice-text-container">

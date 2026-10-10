@@ -59,6 +59,9 @@ export const events: { [key: string]: string } = {
   AUDIO_PLAY_CHANGE: "audioPlayChange",
   // 停止所有语音播放
   AUDIO_STOP_ALL: "audioStopAll",
+  // 消息预览层打开/关闭（支持嵌套计数）
+  MESSAGE_PREVIEW_OPEN: "messagePreviewOpen",
+  MESSAGE_PREVIEW_CLOSE: "messagePreviewClose",
 };
 
 export const HISTORY_LIMIT = 20;
@@ -74,6 +77,7 @@ export const REPLY_MSG_TYPE_MAP: { [key: number]: string } = {
   [V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO]: t("audioMsgText"),
   [V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_VIDEO]: t("videoMsgText"),
   [V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_FILE]: t("fileMsgText"),
+  [V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION]: t("locationMsgText"),
   [V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM]: t("chatHistoryText"),
 };
 

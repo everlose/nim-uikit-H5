@@ -2,9 +2,42 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { autorun } from 'mobx'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
 import { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
+import type { PinInfo } from '@xkit-yx/im-store-v2/dist/types/src/pinMsgsMap'
 import { HISTORY_LIMIT } from '@/NEUIKit/common/utils/constants'
 
 const ANCHOR_HISTORY_LIMIT = 10
+
+const getMessageKey = (item: V2NIMMessageForUI) => {
+  if (item.messageClientId) return `client:${item.messageClientId}`
+  if (item.messageServerId && item.messageServerId !== '0') return `server:${item.messageServerId}`
+  return `local:${item.conversationId}:${item.senderId}:${item.createTime}`
+}
+
+const isSameMessage = (left: V2NIMMessageForUI, right: V2NIMMessageForUI) => {
+  return (
+    getMessageKey(left) === getMessageKey(right) ||
+    (!!left.messageClientId && left.messageClientId === right.messageClientId) ||
+    (!!left.messageServerId && left.messageServerId !== '0' && left.messageServerId === right.messageServerId)
+  )
+}
+
+const isSendingMessage = (msg: V2NIMMessageForUI) =>
+  msg.sendingState === V2NIMConst.V2NIMMessageSendingState.V2NIM_MESSAGE_SENDING_STATE_SENDING
+
+const getMessagesToPreserve = (
+  snapshot: V2NIMMessageForUI[],
+  current: V2NIMMessageForUI[],
+  preservedMessageClientIds: string[] = []
+) => {
+  // Keep request-time additions, pending sends, and explicitly retained local notices.
+  const snapshotKeys = new Set(snapshot.map(getMessageKey))
+  const sendingKeys = new Set(snapshot.filter(isSendingMessage).map(getMessageKey))
+  const preservedIdSet = new Set(preservedMessageClientIds)
+  return current.filter((msg) => {
+    const key = getMessageKey(msg)
+    return !snapshotKeys.has(key) || sendingKeys.has(key) || preservedIdSet.has(msg.messageClientId)
+  })
+}
 
 interface UseChatMessageLoaderOptions {
   conversationId: string
@@ -17,11 +50,16 @@ interface UseChatMessageLoaderOptions {
 }
 
 const mergeMessages = (messages: V2NIMMessageForUI[]) => {
-  const map = new Map<string, V2NIMMessageForUI>()
+  const result: V2NIMMessageForUI[] = []
   messages.forEach((item) => {
-    map.set(item.messageClientId, item)
+    const index = result.findIndex((existing) => isSameMessage(existing, item))
+    if (index >= 0) {
+      result[index] = item
+    } else {
+      result.push(item)
+    }
   })
-  return [...map.values()].sort((a, b) => a.createTime - b.createTime)
+  return result.sort((a, b) => a.createTime - b.createTime)
 }
 
 export const useChatMessageLoader = ({
@@ -52,6 +90,91 @@ export const useChatMessageLoader = ({
   const hasLoadedInitialRef = useRef(false)
   const prevLoginStatusRef = useRef(loginStatus)
   const prevConversationIdRef = useRef(conversationId)
+  const activeConversationIdRef = useRef(conversationId)
+  const activeNimRef = useRef(nim)
+  const activeStoreRef = useRef(store)
+  const activeAccountIdRef = useRef(nim.V2NIMLoginService.getLoginUser())
+  const activeLoginStatusRef = useRef(loginStatus)
+  const previousConversationIdRef = useRef(conversationId)
+  const previousAnchorMessageClientIdRef = useRef(anchorMessageClientId)
+  const previousNimRef = useRef(nim)
+  const previousStoreRef = useRef(store)
+  const previousAccountIdRef = useRef(nim.V2NIMLoginService.getLoginUser())
+  const previousLoginStatusRef = useRef(loginStatus)
+  const requestGenerationRef = useRef(0)
+  const loadingOlderOwnerRef = useRef<number | null>(null)
+
+  const currentAccountId = nim.V2NIMLoginService.getLoginUser()
+  if (
+    previousConversationIdRef.current !== conversationId ||
+    previousAnchorMessageClientIdRef.current !== anchorMessageClientId ||
+    previousNimRef.current !== nim ||
+    previousStoreRef.current !== store ||
+    previousAccountIdRef.current !== currentAccountId ||
+    previousLoginStatusRef.current !== loginStatus
+  ) {
+    previousConversationIdRef.current = conversationId
+    previousAnchorMessageClientIdRef.current = anchorMessageClientId
+    previousNimRef.current = nim
+    previousStoreRef.current = store
+    previousAccountIdRef.current = currentAccountId
+    previousLoginStatusRef.current = loginStatus
+    requestGenerationRef.current += 1
+  }
+  activeConversationIdRef.current = conversationId
+  activeNimRef.current = nim
+  activeStoreRef.current = store
+  activeAccountIdRef.current = currentAccountId
+  activeLoginStatusRef.current = loginStatus
+
+  useEffect(() => {
+    return () => {
+      requestGenerationRef.current += 1
+      loadingOlderOwnerRef.current = null
+      loadingOlderRef.current = false
+    }
+  }, [])
+
+  const beginLoadingOlder = (generation: number) => {
+    if (loadingOlderRef.current && loadingOlderOwnerRef.current !== generation) {
+      loadingOlderOwnerRef.current = null
+      loadingOlderRef.current = false
+      setLoadingOlder(false)
+    }
+    if (loadingOlderRef.current) return false
+    loadingOlderOwnerRef.current = generation
+    setLoadingOlderState(true)
+    return true
+  }
+
+  const endLoadingOlder = (generation: number) => {
+    if (loadingOlderOwnerRef.current !== generation) return
+    loadingOlderOwnerRef.current = null
+    setLoadingOlderState(false)
+  }
+
+  const isRequestContextCurrent = (context: {
+    generation: number
+    conversationId: string
+    nim: any
+    store: any
+    accountId: string
+    loginStatus: V2NIMConst.V2NIMLoginStatus
+  }) => {
+    try {
+      return (
+        context.generation === requestGenerationRef.current &&
+        context.conversationId === activeConversationIdRef.current &&
+        context.nim === activeNimRef.current &&
+        context.store === activeStoreRef.current &&
+        context.accountId === activeAccountIdRef.current &&
+        context.loginStatus === activeLoginStatusRef.current &&
+        context.accountId === context.nim.V2NIMLoginService.getLoginUser()
+      )
+    } catch {
+      return false
+    }
+  }
 
   const setLoadingOlderState = (value: boolean) => {
     loadingOlderRef.current = value
@@ -197,14 +320,64 @@ export const useChatMessageLoader = ({
   }, [conversationId, store])
 
   const syncPinnedMessageList = useCallback(async (forceUpdate = false) => {
-    if (!conversationId) return
+    if (!conversationId) return false
+    const requestGeneration = requestGenerationRef.current
+    const requestConversationId = conversationId
+    const requestNim = nim
+    const requestStore = store
+    const requestAccountId = nim.V2NIMLoginService.getLoginUser()
+    const requestLoginStatus = loginStatus
+    const requestContext = {
+      generation: requestGeneration,
+      conversationId: requestConversationId,
+      nim: requestNim,
+      store: requestStore,
+      accountId: requestAccountId,
+      loginStatus: requestLoginStatus
+    }
+
     try {
-      await (store.msgStore.getPinnedMessageListActive as (conversationId: string, forceUpdate?: boolean) => Promise<unknown>)(conversationId, forceUpdate)
+      const cachedPinMap = requestStore.msgStore.pinMsgs.map.get(requestConversationId)
+      let pinInfos: PinInfo[] = cachedPinMap && !forceUpdate
+        ? (Array.from(cachedPinMap.values()) as PinInfo[])
+        : ((await requestNim.V2NIMMessageService.getPinnedMessageList(requestConversationId)) || []).map((pin: any) => ({
+            ...pin,
+            pinState: 1
+          }))
+      let shouldWritePinMap = forceUpdate || !cachedPinMap
+      const missingMessageRefers = pinInfos
+        .filter((pinInfo) => !pinInfo.message)
+        .map((pinInfo) => pinInfo.messageRefer)
+
+      if (missingMessageRefers.length) {
+        try {
+          const messages = (await requestNim.V2NIMMessageService.getMessageListByRefers(missingMessageRefers)) || []
+          const messageMap = new Map<string, V2NIMMessageForUI>(
+            (messages || []).map((message: any) => [message.messageClientId, message] as [string, V2NIMMessageForUI])
+          )
+          pinInfos = pinInfos.map((pinInfo) => {
+            const message = messageMap.get(pinInfo.messageRefer.messageClientId)
+            return message ? { ...pinInfo, message } : pinInfo
+          })
+          shouldWritePinMap = shouldWritePinMap || messages.length > 0
+        } catch (error) {
+          console.error('Get pinned message details failed', error)
+        }
+      }
+
+      if (!isRequestContextCurrent(requestContext)) return false
+
+      if (shouldWritePinMap) {
+        requestStore.msgStore.pinMsgs.clear(requestConversationId)
+        requestStore.msgStore.pinMsgs.set(requestConversationId, pinInfos)
+      }
       refreshLocalPinState()
+      return true
     } catch (error) {
       console.error('Get pinned message list failed', error)
+      return isRequestContextCurrent(requestContext)
     }
-  }, [conversationId, refreshLocalPinState, store])
+  }, [conversationId, loginStatus, nim, refreshLocalPinState, store])
 
   const getAnchorMessage = useCallback(async () => {
     if (!anchorMessageClientId || !conversationId) return undefined
@@ -223,32 +396,74 @@ export const useChatMessageLoader = ({
     return undefined
   }, [anchorMessageClientId, conversationId, nim, store])
 
-  const loadLatestHistory = useCallback(async () => {
-    if (!conversationId || loadingOlderRef.current) return []
-    setLoadingOlderState(true)
+  const loadLatestHistory = useCallback(async (
+    resetLocalMessages = false,
+    preservedMessageClientIds: string[] = []
+  ) => {
+    if (!conversationId) return []
+    const requestGeneration = requestGenerationRef.current
+    const requestConversationId = conversationId
+    const requestNim = nim
+    const requestStore = store
+    const requestAccountId = nim.V2NIMLoginService.getLoginUser()
+    const requestLoginStatus = loginStatus
+    const snapshot = resetLocalMessages
+      ? ((store.msgStore.getMsg(conversationId) || []) as V2NIMMessageForUI[])
+      : []
+    if (!beginLoadingOlder(requestGeneration)) return []
     try {
-      const historyMsgs = await store.msgStore.getHistoryMsgActive({
+      const historyMsgs = await nim.V2NIMMessageService.getMessageList({
         conversationId,
         endTime: Date.now(),
         limit: HISTORY_LIMIT
       })
+      if (!isRequestContextCurrent({
+        generation: requestGeneration,
+        conversationId: requestConversationId,
+        nim: requestNim,
+        store: requestStore,
+        accountId: requestAccountId,
+        loginStatus: requestLoginStatus
+      })) return []
+
       const normalizedMsgs = normalizeHistoryMsgs(historyMsgs || [])
+
       setHasOlderState(normalizedMsgs.length >= HISTORY_LIMIT)
       setHasNewerState(false)
       setAnchorModeState(false)
       setHasLoadedLatestState(true)
       setShowLatestHint(false)
-      setMsgs(store.msgStore.getMsg(conversationId) || normalizedMsgs)
+      if (resetLocalMessages) {
+        const currentMessages = (store.msgStore.getMsg(conversationId) || []) as V2NIMMessageForUI[]
+        const messagesToPreserve = getMessagesToPreserve(
+          snapshot,
+          currentMessages,
+          preservedMessageClientIds
+        )
+        const nextMessages = mergeMessages([...normalizedMsgs, ...messagesToPreserve])
+        store.msgStore.removeMsg(conversationId)
+        store.msgStore.addMsg(conversationId, nextMessages)
+        setMsgs(nextMessages)
+      } else {
+        store.msgStore.addMsg(conversationId, normalizedMsgs)
+        setMsgs(store.msgStore.getMsg(conversationId) || normalizedMsgs)
+      }
       await notifyHistoryMessagesLoaded(normalizedMsgs)
       return normalizedMsgs
     } finally {
-      setLoadingOlderState(false)
+      endLoadingOlder(requestGeneration)
     }
-  }, [conversationId, normalizeHistoryMsgs, notifyHistoryMessagesLoaded, store])
+  }, [conversationId, loginStatus, nim, normalizeHistoryMsgs, notifyHistoryMessagesLoaded, store])
 
   const loadAnchorHistory = useCallback(async () => {
-    if (!anchorMessageClientId || !conversationId || loadingOlderRef.current) return false
-    setLoadingOlderState(true)
+    if (!anchorMessageClientId || !conversationId) return false
+    const requestGeneration = requestGenerationRef.current
+    const requestConversationId = conversationId
+    const requestNim = nim
+    const requestStore = store
+    const requestAccountId = nim.V2NIMLoginService.getLoginUser()
+    const requestLoginStatus = loginStatus
+    if (!beginLoadingOlder(requestGeneration)) return false
     try {
       const anchorMessage = await getAnchorMessage()
       if (!anchorMessage) return false
@@ -268,6 +483,15 @@ export const useChatMessageLoader = ({
         })
       ])
 
+      if (!isRequestContextCurrent({
+        generation: requestGeneration,
+        conversationId: requestConversationId,
+        nim: requestNim,
+        store: requestStore,
+        accountId: requestAccountId,
+        loginStatus: requestLoginStatus
+      })) return false
+
       const normalizedMsgs = normalizeHistoryMsgs([...(beforeMsgs || []), anchorMessage, ...(afterMsgs || [])])
       const mergedMsgs = mergeMessages(normalizedMsgs)
       const hasLoadedLatestNow = (afterMsgs || []).length === 0 || containsLastMessage([anchorMessage, ...(afterMsgs || [])])
@@ -275,21 +499,27 @@ export const useChatMessageLoader = ({
       store.msgStore.addMsg(conversationId, mergedMsgs)
       setMsgs(mergedMsgs)
       setHasOlderState((beforeMsgs || []).length >= ANCHOR_HISTORY_LIMIT)
-      setHasNewerState(!hasLoadedLatestNow && (afterMsgs || []).length >= ANCHOR_HISTORY_LIMIT)
+      setHasNewerState(!hasLoadedLatestNow)
       setAnchorModeState(true)
       setHasLoadedLatestState(hasLoadedLatestNow)
       setShowLatestHint(false)
       await notifyHistoryMessagesLoaded(mergedMsgs)
       return true
     } finally {
-      setLoadingOlderState(false)
+      endLoadingOlder(requestGeneration)
     }
-  }, [anchorMessageClientId, containsLastMessage, conversationId, getAnchorMessage, nim, normalizeHistoryMsgs, notifyHistoryMessagesLoaded, store])
+  }, [anchorMessageClientId, containsLastMessage, conversationId, getAnchorMessage, loginStatus, nim, normalizeHistoryMsgs, notifyHistoryMessagesLoaded, store])
 
   const loadOlder = useCallback(
     async (firstMsg?: V2NIMMessageForUI) => {
-      if (!conversationId || loadingOlderRef.current || !hasOlderRef.current) return []
-      setLoadingOlderState(true)
+      if (!conversationId || !hasOlderRef.current) return []
+      const requestGeneration = requestGenerationRef.current
+      const requestConversationId = conversationId
+      const requestNim = nim
+      const requestStore = store
+      const requestAccountId = nim.V2NIMLoginService.getLoginUser()
+      const requestLoginStatus = loginStatus
+      if (!beginLoadingOlder(requestGeneration)) return []
       try {
         let historyMsgs: V2NIMMessageForUI[] = []
         if (anchorModeRef.current && firstMsg) {
@@ -301,14 +531,25 @@ export const useChatMessageLoader = ({
               limit: HISTORY_LIMIT
             })) || []
         } else {
-          historyMsgs =
-            (await store.msgStore.getHistoryMsgActive({
-              conversationId,
-              endTime: firstMsg?.createTime || Date.now(),
-              lastMsgId: firstMsg?.messageServerId,
-              limit: HISTORY_LIMIT
-            })) || []
+          const anchorMessage = firstMsg?.messageClientId
+            ? store.msgStore.getMsg(conversationId, [firstMsg.messageClientId])?.[0] || firstMsg
+            : undefined
+          historyMsgs = (await nim.V2NIMMessageService.getMessageList({
+            conversationId,
+            endTime: firstMsg?.createTime || Date.now(),
+            anchorMessage: anchorMessage as any,
+            limit: HISTORY_LIMIT
+          })) || []
         }
+
+        if (!isRequestContextCurrent({
+          generation: requestGeneration,
+          conversationId: requestConversationId,
+          nim: requestNim,
+          store: requestStore,
+          accountId: requestAccountId,
+          loginStatus: requestLoginStatus
+        })) return []
 
         const normalizedMsgs = normalizeHistoryMsgs(historyMsgs)
         setHasOlderState(normalizedMsgs.length >= HISTORY_LIMIT)
@@ -319,15 +560,21 @@ export const useChatMessageLoader = ({
         }
         return normalizedMsgs
       } finally {
-        setLoadingOlderState(false)
+        endLoadingOlder(requestGeneration)
       }
     },
-    [conversationId, nim, normalizeHistoryMsgs, notifyHistoryMessagesLoaded, store]
+    [conversationId, loginStatus, nim, normalizeHistoryMsgs, notifyHistoryMessagesLoaded, store]
   )
 
   const loadNewer = useCallback(
     async (lastMsg?: V2NIMMessageForUI) => {
       if (!anchorModeRef.current || loadingNewerRef.current || !lastMsg || !hasNewerRef.current) return []
+      const requestGeneration = requestGenerationRef.current
+      const requestConversationId = conversationId
+      const requestNim = nim
+      const requestStore = store
+      const requestAccountId = nim.V2NIMLoginService.getLoginUser()
+      const requestLoginStatus = loginStatus
       setLoadingNewerState(true)
       try {
         const newerMsgs =
@@ -337,6 +584,15 @@ export const useChatMessageLoader = ({
             direction: V2NIMConst.V2NIMQueryDirection.V2NIM_QUERY_DIRECTION_ASC,
             limit: HISTORY_LIMIT
           })) || []
+        if (!isRequestContextCurrent({
+          generation: requestGeneration,
+          conversationId: requestConversationId,
+          nim: requestNim,
+          store: requestStore,
+          accountId: requestAccountId,
+          loginStatus: requestLoginStatus
+        })) return []
+
         const normalizedMsgs = normalizeHistoryMsgs(newerMsgs)
 
         if (normalizedMsgs.length) {
@@ -352,13 +608,13 @@ export const useChatMessageLoader = ({
         setLoadingNewerState(false)
       }
     },
-    [containsLastMessage, conversationId, nim, normalizeHistoryMsgs, notifyHistoryMessagesLoaded, store, updateLatestStateByMessages]
+    [containsLastMessage, conversationId, loginStatus, nim, normalizeHistoryMsgs, notifyHistoryMessagesLoaded, store, updateLatestStateByMessages]
   )
 
-  const switchToLatest = useCallback(async () => {
+  const switchToLatest = useCallback(async (preservedMessageClientIds: string[] = []) => {
     setLoadingNewerState(true)
     try {
-      return await loadLatestHistory()
+      return await loadLatestHistory(true, preservedMessageClientIds)
     } finally {
       setLoadingNewerState(false)
     }
@@ -415,7 +671,8 @@ export const useChatMessageLoader = ({
     let canceled = false
     const loadInitialMessages = async () => {
       const forceUpdatePinList = hasLoadedInitialRef.current && prevLoginStatusRef.current !== V2NIMConst.V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINED
-      await syncPinnedMessageList(forceUpdatePinList)
+      const pinnedMessagesSynced = await syncPinnedMessageList(forceUpdatePinList)
+      if (canceled || !pinnedMessagesSynced) return
       const loadedAnchor = anchorMessageClientId ? await loadAnchorHistory() : false
       if (!canceled && (!anchorMessageClientId || !loadedAnchor)) {
         await loadLatestHistory()

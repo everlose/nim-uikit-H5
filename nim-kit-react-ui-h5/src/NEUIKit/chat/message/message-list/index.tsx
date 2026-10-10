@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { observer } from 'mobx-react-lite'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
@@ -28,19 +28,39 @@ interface MessageListProps {
   autoScrollToBottom?: boolean
   onLoadOlder?: (firstMsg?: any) => void | Promise<unknown>
   onLoadNewer?: (lastMsg?: any) => void | Promise<unknown>
+  /**
+   * show：是否需要展示“回到最新”入口（滚过最后一条正常消息的高度才算离开最新）
+   * source：本次判定的触发来源
+   * atLatest：视口是否真的在消息列表底部（仅能测量时透传），用于新消息提醒的计数与位置保持
+   */
+  onLatestVisibilityChange?: (show: boolean, source: LatestVisibilitySource, atLatest?: boolean) => void
   isMultiSelecting?: boolean
+  isScrollLocked?: boolean
   selectedMessageIds?: string[]
   onToggleSelect?: (msg: any) => void
   onMultiSelect?: (msg: any) => void
 }
 
-const isNormalMsg = (item: any) => !(item.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM && ['beReCallMsg', 'reCallMsg'].includes(item.recallType || ''))
+export type LatestVisibilitySource = 'scroll' | 'layout' | 'restore' | 'programmatic'
+
+export interface MessageListScrollSnapshot {
+  anchorMessageClientId: string
+  anchorOffsetTop: number
+  scrollTop: number
+}
+
+export interface MessageListHandle {
+  captureScrollPosition: () => MessageListScrollSnapshot | null
+  restoreScrollPosition: (snapshot: MessageListScrollSnapshot | null) => void
+}
+
+const isNormalMsg = (item: any) => !(item.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM && (item.timeValue !== undefined || ['beReCallMsg', 'reCallMsg'].includes(item.recallType || '')))
 
 /**
  * 消息列表组件
  */
-const MessageList: React.FC<MessageListProps> = observer(
-  ({
+const MessageList = observer(
+  forwardRef<MessageListHandle, MessageListProps>(({
     msgs = [],
     conversationType,
     to,
@@ -55,14 +75,17 @@ const MessageList: React.FC<MessageListProps> = observer(
     autoScrollToBottom = true,
     onLoadOlder,
     onLoadNewer,
+    onLatestVisibilityChange,
     isMultiSelecting = false,
+    isScrollLocked = false,
     selectedMessageIds = [],
     onToggleSelect,
     onMultiSelect
-  }) => {
+  }, ref) => {
     const { t } = useTranslation()
     const { store } = useStateContext()
     const messageListRef = useRef<HTMLDivElement>(null)
+    const onLatestVisibilityChangeRef = useRef(onLatestVisibilityChange)
     const anchorScrollStateRef = useRef({
       anchorMessageClientId: '',
       scrolled: false
@@ -70,6 +93,11 @@ const MessageList: React.FC<MessageListProps> = observer(
     const pagingLockRef = useRef(false)
     const loadingOlderRef = useRef(loadingOlder)
     const loadingNewerRef = useRef(loadingNewer)
+    const isMultiSelectingRef = useRef(isMultiSelecting)
+    const isScrollLockedRef = useRef(isScrollLocked)
+    const restoringScrollPositionRef = useRef(false)
+    const shouldStickToBottomRef = useRef(true)
+    const programmaticScrollFrameRef = useRef(0)
     const onLoadMoreRef = useRef<() => void>(() => undefined)
     const pendingPaginationRef = useRef<{
       direction: 'older' | 'newer'
@@ -77,6 +105,52 @@ const MessageList: React.FC<MessageListProps> = observer(
       prevScrollTop: number
     } | null>(null)
     const [broadcastNewAudioSrc, setBroadcastNewAudioSrc] = useState('')
+    isMultiSelectingRef.current = isMultiSelecting
+    isScrollLockedRef.current = isScrollLocked
+
+    useImperativeHandle(ref, () => ({
+      captureScrollPosition: () => {
+        const container = messageListRef.current
+        if (!container) return null
+        const containerTop = container.getBoundingClientRect().top
+        const anchor = Array.from(
+          container.querySelectorAll<HTMLElement>(`[id^="${MSG_ID_FLAG}"]`)
+        ).find((element) => element.getBoundingClientRect().bottom > containerTop)
+        return {
+          anchorMessageClientId: anchor?.id.slice(MSG_ID_FLAG.length) || '',
+          anchorOffsetTop: anchor ? anchor.getBoundingClientRect().top - containerTop : 0,
+          scrollTop: container.scrollTop
+        }
+      },
+      restoreScrollPosition: (snapshot) => {
+        if (!snapshot) return
+        restoringScrollPositionRef.current = true
+        requestAnimationFrame(() => {
+          const container = messageListRef.current
+          if (!container) {
+            restoringScrollPositionRef.current = false
+            return
+          }
+          const anchor = snapshot.anchorMessageClientId
+            ? document.getElementById(`${MSG_ID_FLAG}${snapshot.anchorMessageClientId}`)
+            : null
+          if (anchor) {
+            const currentOffset = anchor.getBoundingClientRect().top - container.getBoundingClientRect().top
+            container.scrollTop += currentOffset - snapshot.anchorOffsetTop
+          } else {
+            container.scrollTop = snapshot.scrollTop
+          }
+          updateLatestVisibility('restore')
+          requestAnimationFrame(() => {
+            restoringScrollPositionRef.current = false
+          })
+        })
+      }
+    }))
+
+    useEffect(() => {
+      onLatestVisibilityChangeRef.current = onLatestVisibilityChange
+    }, [onLatestVisibilityChange])
 
     /**
      * 处理消息列表，插入时间分割线
@@ -107,12 +181,109 @@ const MessageList: React.FC<MessageListProps> = observer(
       return normalMsgs[normalMsgs.length - 1]
     }
 
+    // 最后一条正常消息的标识。撤回时列表长度不变，但“最后一条正常消息”会换成更早的一条，
+    // 需要据此重新建立观察，避免 ResizeObserver 一直挂在已被删除的节点上。
+    const lastNormalMessageClientId = getLastNormalMsg()?.messageClientId || ''
+
+    const latestMessageResizeObserverRef = useRef<ResizeObserver | null>(null)
+    // “回到最新”入口上一次的判定结果（连带当时的滚动位置）
+    const latestVisibilityRef = useRef<{ scrollTop: number; show: boolean } | null>(null)
+
+    /**
+     * 解析“回到最新”入口是否展示。
+     * - 视口真的在底部（atLatest）时一定不展示；
+     * - 用户滚动了位置时按产品口径重算：滚过最后一条正常消息的高度才算离开最新；
+     * - 位置没变、只有内容变化时（撤回把最后一条换成更早的一条、图片加载完成等）沿用上一次判定，
+     *   否则内容变化会在用户手指没动的情况下翻转判定，出现“撤回后回到最新箭头消失”。
+     */
+    const resolveLatestVisibility = (scrollTop: number, distanceFromBottom: number, atLatest: boolean) => {
+      const previous = latestVisibilityRef.current
+      let show: boolean
+      if (atLatest) {
+        show = false
+      } else if (!previous || previous.scrollTop !== scrollTop) {
+        const lastMsg = getLastNormalMsg()
+        const lastElement = lastMsg?.messageClientId
+          ? document.getElementById(`${MSG_ID_FLAG}${lastMsg.messageClientId}`)
+          : null
+        const latestMessageHeight = lastElement ? Math.max(lastElement.getBoundingClientRect().height, 1) : 0
+        show = latestMessageHeight > 0 ? distanceFromBottom >= latestMessageHeight - 1 : distanceFromBottom > 1
+      } else {
+        show = previous.show
+      }
+      latestVisibilityRef.current = { scrollTop, show }
+      return show
+    }
+
+    const updateLatestVisibility = (source: LatestVisibilitySource = 'layout') => {
+      if (!messageListRef.current) {
+        onLatestVisibilityChangeRef.current?.(false, source)
+        return
+      }
+      if (anchorMode) {
+        shouldStickToBottomRef.current = false
+      }
+      const container = messageListRef.current
+      if (
+        (source === 'programmatic' ||
+          (source === 'layout' && shouldStickToBottomRef.current)) &&
+        !isMultiSelectingRef.current &&
+        !isScrollLockedRef.current &&
+        !restoringScrollPositionRef.current
+      ) {
+        container.scrollTop = container.scrollHeight
+      }
+      const { scrollTop, scrollHeight, clientHeight } = container
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+      if (source === 'programmatic') {
+        shouldStickToBottomRef.current = true
+      } else if (source !== 'layout') {
+        shouldStickToBottomRef.current = distanceFromBottom <= 1
+      }
+      // 位置口径：只表达“视口是否真的在列表底部”，不受消息内容高度影响，
+      // 用于新消息提醒的计数与是否保持滚动位置。
+      const atLatest = distanceFromBottom <= 1
+      const show = resolveLatestVisibility(scrollTop, distanceFromBottom, atLatest)
+      onLatestVisibilityChangeRef.current?.(show, source, atLatest)
+    }
+
+    const observeLatestMessage = () => {
+      latestMessageResizeObserverRef.current?.disconnect()
+      latestMessageResizeObserverRef.current = null
+      const lastMsg = getLastNormalMsg()
+      const lastElement = lastMsg?.messageClientId
+        ? document.getElementById(`${MSG_ID_FLAG}${lastMsg.messageClientId}`)
+        : null
+      if (lastElement) {
+        latestMessageResizeObserverRef.current = new ResizeObserver(() => {
+          updateLatestVisibility('layout')
+        })
+        latestMessageResizeObserverRef.current.observe(lastElement)
+      }
+      updateLatestVisibility()
+    }
+
     /**
      * 滚动到底部
      */
-    const scrollToBottom = () => {
+    const scrollToBottom = (event?: unknown) => {
+      if (isMultiSelectingRef.current || isScrollLockedRef.current || restoringScrollPositionRef.current) {
+        return
+      }
+      const options = event as { behavior?: ScrollBehavior } | undefined
       if (messageListRef.current) {
-        messageListRef.current.scrollTop = messageListRef.current.scrollHeight
+        shouldStickToBottomRef.current = true
+        cancelAnimationFrame(programmaticScrollFrameRef.current)
+        programmaticScrollFrameRef.current = requestAnimationFrame(() => {
+          programmaticScrollFrameRef.current = 0
+        })
+        const top = messageListRef.current.scrollHeight
+        if (options?.behavior === 'smooth') {
+          messageListRef.current.scrollTo({ top, behavior: 'smooth' })
+        } else {
+          messageListRef.current.scrollTop = top
+        }
+        updateLatestVisibility('programmatic')
       }
     }
 
@@ -178,6 +349,12 @@ const MessageList: React.FC<MessageListProps> = observer(
 
     const handleScroll = () => {
       if (!messageListRef.current) return
+      const source: LatestVisibilitySource = restoringScrollPositionRef.current
+          ? 'restore'
+          : programmaticScrollFrameRef.current
+            ? 'programmatic'
+            : 'scroll'
+      updateLatestVisibility(source)
       if (pagingLockRef.current || loadingOlderRef.current || loadingNewerRef.current) return
 
       const { scrollTop, scrollHeight, clientHeight } = messageListRef.current
@@ -216,8 +393,8 @@ const MessageList: React.FC<MessageListProps> = observer(
       unlockPaginationAfterRender()
     }, [finalMsgs.length, loadingOlder, loadingNewer])
 
-    // 组件挂载时初始化
-    useEffect(() => {
+    // 组件挂载时初始化；滚动事件需要在切换 autoScrollToBottom 后立即重新注册
+    useLayoutEffect(() => {
       const team = store.teamStore.teams.get(to)
 
       // 如果是群聊，加载群成员信息
@@ -260,6 +437,7 @@ const MessageList: React.FC<MessageListProps> = observer(
         } else if (autoScrollToBottom) {
           scrollToBottom()
         }
+        updateLatestVisibility()
         clearTimeout(timer)
       }, 100)
 
@@ -291,9 +469,16 @@ const MessageList: React.FC<MessageListProps> = observer(
         // 容器变矮（键盘弹起）时，之前用户在底部附近 → 需要保持滚到底部
         const containerShrunk = clientHeight < prev.clientHeight
 
-        if (isNearBottom || (wasNearBottom && containerShrunk)) {
+        if (
+          !isMultiSelectingRef.current &&
+          !isScrollLockedRef.current &&
+          !restoringScrollPositionRef.current &&
+          (isNearBottom || (wasNearBottom && containerShrunk))
+        ) {
           currentEl.scrollTop = scrollHeight
         }
+
+        updateLatestVisibility()
 
         // 更新状态快照
         prev.clientHeight = clientHeight
@@ -316,9 +501,19 @@ const MessageList: React.FC<MessageListProps> = observer(
       return () => {
         observer.disconnect()
         cancelAnimationFrame(rafId)
+        cancelAnimationFrame(programmaticScrollFrameRef.current)
         window.visualViewport?.removeEventListener('resize', onViewportResize)
       }
     }, [])
+
+    useLayoutEffect(() => {
+      const frame = requestAnimationFrame(observeLatestMessage)
+      return () => {
+        cancelAnimationFrame(frame)
+        latestMessageResizeObserverRef.current?.disconnect()
+        latestMessageResizeObserverRef.current = null
+      }
+    }, [anchorMode, finalMsgs.length, lastNormalMessageClientId, loadingOlder, loadingNewer])
 
     useEffect(() => {
       if (!anchorMessageClientId) return
@@ -371,7 +566,7 @@ const MessageList: React.FC<MessageListProps> = observer(
         </div>
       </div>
     )
-  }
+  })
 )
 
 export default MessageList

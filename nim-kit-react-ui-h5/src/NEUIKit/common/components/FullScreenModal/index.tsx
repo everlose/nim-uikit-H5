@@ -33,6 +33,12 @@ const FullScreenModal: React.FC<FullScreenModalProps> = ({
   useEffect(() => {
     if (visible) {
       emitter.emit(events.AUDIO_STOP_ALL)
+      emitter.emit(events.MESSAGE_PREVIEW_OPEN)
+    }
+    return () => {
+      if (visible) {
+        emitter.emit(events.MESSAGE_PREVIEW_CLOSE)
+      }
     }
   }, [visible])
 

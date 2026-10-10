@@ -33,7 +33,7 @@ const LastMsgContent: React.FC<LastMsgContentProps> = observer(({ lastMessage })
       videoMsgText: t('videoMsgText'),
       fileMsgText: t('fileMsgText'),
       callMsgText: t('callMsgText'),
-      geoMsgText: t('geoMsgText'),
+      locationMsgText: t('locationMsgText'),
       imgMsgText: t('imgMsgText'),
       notiMsgText: t('notiMsgText'),
       robotMsgText: t('robotMsgText'),
@@ -136,7 +136,7 @@ const LastMsgContent: React.FC<LastMsgContentProps> = observer(({ lastMessage })
       return <div>{translateMsg('callMsgText')}</div>
 
     case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION:
-      return <div>{translateMsg('geoMsgText')}</div>
+      return <div>{translateMsg('locationMsgText')}</div>
 
     case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_ROBOT:
       return <div>{translateMsg('robotMsgText')}</div>

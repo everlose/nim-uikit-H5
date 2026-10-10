@@ -4,10 +4,12 @@ import Icon from '@/NEUIKit/common/components/Icon'
 import MessageOneLine from '@/NEUIKit/common/components/MessageOneLine'
 import MessageText from '@/NEUIKit/chat/message/message-text'
 import MessageAudio from '@/NEUIKit/chat/message/message-audio'
+import MessageLocationViewer from '@/NEUIKit/chat/message/message-location-viewer'
 import PreviewImage from '@/NEUIKit/common/components/PreviewImage'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { REPLY_MSG_TYPE_MAP } from '@/NEUIKit/common/utils/constants'
+import { buildFileDownloadUrl } from '@/NEUIKit/common/utils/file'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
 import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
 import { parseMergedForwardPayload, normalizeMergedForwardText } from '@/NEUIKit/chat/message/merged-forward/utils'
@@ -32,15 +34,18 @@ const MessageReply: React.FC<MessageReplyProps> = observer(({ replyMsg }) => {
   const [mergedForwardVisible, setMergedForwardVisible] = useState(false)
   const [mergedForwardMsgs, setMergedForwardMsgs] = useState<V2NIMMessageForUI[]>([])
 
-  // 从附件中获取文件名和下载链接
+  // 从附件中获取文件名、扩展名和下载链接
   //@ts-ignore
-  const { name = '', url = '' } = replyMsg?.attachment || {}
-  const downloadUrl = url + ((url as string).includes('?') ? '&' : '?') + `download=${name}`
+  const { name = '', url = '', ext = '' } = replyMsg?.attachment || {}
+  const downloadUrl = buildFileDownloadUrl(url as string, name as string, ext as string)
 
   // 被回复消息是否存在（如果messageClientId为noFind表示消息不存在）
   const isReplyMsgExist = useMemo(() => {
     return replyMsg?.messageClientId !== 'noFind'
   }, [replyMsg?.messageClientId])
+
+  // 被回复的是地理位置消息：全屏查看走 MessageLocationViewer（与消息气泡点击入口共用）
+  const isLocationReplyMsg = replyMsg?.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION
 
   // 图片链接
   const imageUrl = useMemo(() => {
@@ -102,6 +107,9 @@ const MessageReply: React.FC<MessageReplyProps> = observer(({ replyMsg }) => {
       }
     } else if (replyMsg?.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO) {
       setIsFullScreen(true)
+    } else if (replyMsg?.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION) {
+      // 地理位置消息：H5 不接三方地图 SDK，全屏展示占位图 + 地理标题 + 详细地址
+      setIsFullScreen(true)
     } else if (replyMsg?.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_CUSTOM) {
       openMergedForward()
     }
@@ -151,7 +159,9 @@ const MessageReply: React.FC<MessageReplyProps> = observer(({ replyMsg }) => {
       </div>
 
       {/* 点击被回复的消息需要全屏显示 */}
-      {isFullScreen && (
+      {isFullScreen && isLocationReplyMsg && <MessageLocationViewer msg={replyMsg} onClose={() => setIsFullScreen(false)} />}
+
+      {isFullScreen && !isLocationReplyMsg && (
         <div className="reply-full-screen" onClick={showFullReplyMsg}>
           <div className="reply-message-close" onClick={closeFullReplyMsg}>
             <Icon style={{ color: '#929299', fontWeight: '200' }} size={18} type="icon-guanbi" />

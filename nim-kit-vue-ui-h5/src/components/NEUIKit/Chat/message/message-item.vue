@@ -442,14 +442,25 @@
          <MessageBubble
           :msg="props.msg"
           :tooltip-visible="true"
-          :bg-visible="true"
+          :bg-visible="false"
           :is-multi-selecting="props.isMultiSelecting"
           :on-multi-select="props.onMultiSelect"
           :readonly="props.readonly"
         >
-          [{{ t("geoMsgText") }}]
+          <MessageLocation
+            :msg="props.msg"
+            :is-self="props.msg.isSelf"
+            :on-view-location="
+              props.isMultiSelecting ? undefined : openLocationViewer
+            "
+          />
         </MessageBubble>
       </div>
+      <MessageLocationViewer
+        v-if="isLocationViewerVisible"
+        :msg="props.msg"
+        @close="isLocationViewerVisible = false"
+      />
     </div>
     <!-- 机器人消息 -->
     <div
@@ -579,6 +590,7 @@ import {
   computed,
   onUnmounted,
   getCurrentInstance,
+  watch,
 } from "vue";
 import Avatar from "../../CommonComponents/Avatar.vue";
 import Icon from "../../CommonComponents/Icon.vue";
@@ -589,6 +601,8 @@ import { t } from "../../utils/i18n";
 import { getLanguage } from "../../utils/i18n";
 import ReplyMessage from "./message-reply.vue";
 import MessageFile from "./message-file.vue";
+import MessageLocation from "./message-location.vue";
+import MessageLocationViewer from "./message-location-viewer.vue";
 import MessageText from "./message-text.vue";
 import MessageAudio from "./message-audio.vue";
 import MessageNotification from "./message-notification.vue";
@@ -605,6 +619,8 @@ import { getMergedForwardCallText, isMergedForwardMsg } from "./merged-forward/u
 import { getImageAttachmentSize, getImageRenderStyle, getImageThumbUrl } from "../../utils/image";
 
 const isPreviewVisible = ref(false);
+// 地理位置全屏查看状态（H5 不接三方地图 SDK，只展示占位图 + 标题 + 详细地址）
+const isLocationViewerVisible = ref(false);
 const props = withDefaults(
   defineProps<{
     msg: V2NIMMessageForUI & { timeValue?: number };
@@ -632,6 +648,11 @@ const props = withDefaults(
 const { proxy } = getCurrentInstance()!; // 获取组件实例
 const store = proxy?.$UIKitStore;
 const selectable = computed(() => !props.readonly && isSelectableMessage(props.msg));
+// 多选态下点击用于勾选消息，不打开位置查看
+const openLocationViewer = () => {
+  if (props.isMultiSelecting) return;
+  isLocationViewerVisible.value = true;
+};
 const isMergedForward = computed(
   () => !!store && isMergedForwardMsg(store, props.msg)
 );
@@ -733,11 +754,19 @@ const handleImageTouch = (url: string) => {
 const videoPlayerUrl = ref('')
 const videoPlayerVisible = ref(false)
 
+watch(videoPlayerVisible, (visible) => {
+  emitter.emit(
+    visible ? events.MESSAGE_PREVIEW_OPEN : events.MESSAGE_PREVIEW_CLOSE
+  );
+});
+
 // 点击视频播放
 const handleVideoTouch = (msg: V2NIMMessageForUI) => {
    //@ts-ignore
-   const url = msg.attachment?.url;
+  const url = msg.attachment?.url;
   if (url) {
+    // Video opens in an overlay, so stop any audio that would otherwise continue underneath it.
+    emitter.emit(events.AUDIO_STOP_ALL);
     // 在当前页面打开视频播放 overlay，不跳转新窗口
     videoPlayerUrl.value = url
     videoPlayerVisible.value = true
@@ -840,6 +869,9 @@ const pinTipName = computed(() => {
 });
 
 onUnmounted(() => {
+  if (videoPlayerVisible.value) {
+    emitter.emit(events.MESSAGE_PREVIEW_CLOSE);
+  }
   uninstallAppellationWatch();
 });
 </script>
@@ -946,6 +978,10 @@ onUnmounted(() => {
 .msg-content {
   display: flex;
   flex-direction: column;
+  /* 默认的 align-items: stretch 会把子元素拉到容器宽度，而容器宽度由最宽的子元素决定：
+     昵称（最长 300px）比消息内容长时，短消息的 .msg-bg 会被撑到昵称那么宽，
+     合并转发详情页里一条短文本会显示成长气泡。改为让子元素各自按内容占宽。 */
+  align-items: flex-start;
 }
 
 .msg-name {

@@ -1,12 +1,24 @@
 <template>
   <span :class="className" :style="iconStyle">
     <img
+      v-if="!disableNativeLongPress"
       :src="_url"
+      draggable="false"
       :style="{
         width: (width || size) + 'px',
         height: (height || size) + 'px',
       }"
       class="icon"
+    />
+    <span
+      v-else
+      class="icon icon-background"
+      aria-hidden="true"
+      :style="{
+        width: (width || size) + 'px',
+        height: (height || size) + 'px',
+        backgroundImage: `url(${_url})`,
+      }"
     />
   </span>
 </template>
@@ -97,6 +109,7 @@ import IconGuanyu from "../static/icons/icon-guanyu.png";
 import IconHuifu from "../static/icons/icon-huifu.png";
 import IconImXuanzhong from "../static/icons/icon-im-xuanzhong.png";
 import IconJiantou from "../static/icons/icon-jiantou.png";
+import IconChatMessageArrowBottom from "../static/icons/icon-chat-message-arrow-bottom.svg";
 import IconJiaruqunzu from "../static/icons/icon-jiaruqunzu.png";
 import IconKefu from "../static/icons/icon-kefu.png";
 import IconLahei from "../static/icons/icon-lahei.png";
@@ -104,6 +117,19 @@ import IconLishixiaoxi from "../static/icons/icon-lishixiaoxi.png";
 import IconAdd from "../static/icons/icon-Add.svg";
 import IconMore from "../static/icons/icon-More.svg";
 import IconPPT from "../static/icons/icon-PPT.png";
+import IconPdfFile from "../static/icons/icon-pdf-file.svg";
+import IconHtmlFile from "../static/icons/icon-html-file.svg";
+import IconAosWord from "../static/icons/icon-aos-word.svg";
+import IconAosExcel from "../static/icons/icon-aos-excel.svg";
+import IconAosPpt from "../static/icons/icon-aos-ppt.svg";
+import IconAosImage from "../static/icons/icon-aos-image.svg";
+import IconAosRar from "../static/icons/icon-aos-rar.svg";
+import IconAosPdf from "../static/icons/icon-aos-pdf.svg";
+import IconAosText from "../static/icons/icon-aos-text.svg";
+import IconAosHtml from "../static/icons/icon-aos-html.svg";
+import IconAosVideo from "../static/icons/icon-aos-video.svg";
+import IconAosMp3 from "../static/icons/icon-aos-mp3.svg";
+import IconAosUnknown from "../static/icons/icon-aos-unknown.svg";
 import IconQita from "../static/icons/icon-qita.png";
 import IconQuxiaoxiaoximiandarao from "../static/icons/icon-quxiaoxiaoximiandarao.png";
 import IconQuxiaozhiding from "../static/icons/icon-quxiaozhiding.png";
@@ -181,9 +207,11 @@ const props = withDefaults(
     height?: number;
     iconClassName?: string;
     iconStyle?: any;
+    disableNativeLongPress?: boolean;
   }>(),
   {
     size: 16,
+    disableNativeLongPress: false,
   }
 );
 const urlMap = {
@@ -271,6 +299,7 @@ const urlMap = {
   "icon-huifu": IconHuifu,
   "icon-im-xuanzhong": IconImXuanzhong,
   "icon-jiantou": IconJiantou,
+  "icon-chat-message-arrow-bottom": IconChatMessageArrowBottom,
   "icon-jiaruqunzu": IconJiaruqunzu,
   "icon-kefu": IconKefu,
   "icon-lahei": IconLahei,
@@ -278,6 +307,19 @@ const urlMap = {
   "icon-add": IconAdd,
   "icon-More": IconMore,
   "icon-PPT": IconPPT,
+  "icon-pdf-file": IconPdfFile,
+  "icon-html-file": IconHtmlFile,
+  "icon-aos-word": IconAosWord,
+  "icon-aos-excel": IconAosExcel,
+  "icon-aos-ppt": IconAosPpt,
+  "icon-aos-image": IconAosImage,
+  "icon-aos-rar": IconAosRar,
+  "icon-aos-pdf": IconAosPdf,
+  "icon-aos-text": IconAosText,
+  "icon-aos-html": IconAosHtml,
+  "icon-aos-video": IconAosVideo,
+  "icon-aos-mp3": IconAosMp3,
+  "icon-aos-unknown": IconAosUnknown,
   "icon-qita": IconQita,
   "icon-quxiaoxiaoximiandarao": IconQuxiaoxiaoximiandarao,
   "icon-quxiaozhiding": IconQuxiaozhiding,
@@ -363,10 +405,23 @@ const className = `${props.iconClassName || ""} icon-wrapper`;
 .icon-wrapper {
   display: inline-block;
   line-height: 0;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
 }
 
 .icon {
   display: inline-block;
   vertical-align: middle;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
+.icon-background {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
 }
 </style>

@@ -44,8 +44,14 @@
       </div>
     </div>
     <!-- 点击被回复的消息需要全屏显示 -->
+    <!-- 地理位置消息走统一的全屏查看组件（与消息气泡点击入口共用） -->
+    <MessageLocationViewer
+      v-if="isFullScreen && isLocationReplyMsg"
+      :msg="replyMsg"
+      @close="isFullScreen = false"
+    />
     <div
-      v-if="isFullScreen"
+      v-if="isFullScreen && !isLocationReplyMsg"
       class="reply-full-screen"
       @click="showFullReplyMsg"
     >
@@ -121,10 +127,12 @@ import MessageOneLine from "../../CommonComponents/MessageOneLine.vue";
 import { ref, onMounted, computed, getCurrentInstance, onUnmounted } from "vue";
 import MessageText from "./message-text.vue";
 import { REPLY_MSG_TYPE_MAP } from "../../utils/constants";
+import { buildFileDownloadUrl } from "../../utils/file";
 import { autorun } from "mobx";
 import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
 import MessageAudio from "./message-audio.vue";
+import MessageLocationViewer from "./message-location-viewer.vue";
 import Icon from "../../CommonComponents/Icon.vue";
 import PreviewImage from "../../CommonComponents/PreviewImage.vue";
 import MergedForwardModal from "./merged-forward/modal.vue";
@@ -143,15 +151,25 @@ const mergedForwardVisible = ref(false);
 const mergedForwardMsgs = ref<V2NIMMessageForUI[]>([]);
 
 //@ts-ignore
-const { name = "", url = "" } = props.replyMsg?.attachment || {};
+const { name = "", url = "", ext = "" } = props.replyMsg?.attachment || {};
 
-const downloadUrl =
-  url + ((url as string).includes("?") ? "&" : "?") + `download=${name}`;
+const downloadUrl = buildFileDownloadUrl(
+  url as string,
+  name as string,
+  ext as string
+);
 
 // 被回复消息是否存在
 const isReplyMsgExist = computed(() => {
   return props.replyMsg?.messageClientId !== "noFind";
 });
+
+// 被回复的是地理位置消息：全屏查看走 MessageLocationViewer（与消息气泡点击入口共用）
+const isLocationReplyMsg = computed(
+  () =>
+    props.replyMsg?.messageType ===
+    V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION
+);
 
 // 被回复的图片消息url
 const imageUrl = computed(() => {
@@ -224,6 +242,12 @@ const showFullReplyMsg = () => {
     props.replyMsg?.messageType ===
     V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_AUDIO
   ) {
+    isFullScreen.value = true;
+  } else if (
+    props.replyMsg?.messageType ===
+    V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION
+  ) {
+    // 地理位置消息：H5 不接三方地图 SDK，全屏展示占位图 + 地理标题 + 详细地址
     isFullScreen.value = true;
   } else if (
     props.replyMsg?.messageType ===

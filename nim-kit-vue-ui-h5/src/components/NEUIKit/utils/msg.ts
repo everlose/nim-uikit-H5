@@ -11,7 +11,7 @@ const translate = (key: string): string => {
       videoMsgText: t("videoMsgText"),
       fileMsgText: t("fileMsgText"),
       callMsgText: t("callMsgText"),
-      geoMsgText: t("geoMsgText"),
+      locationMsgText: t("locationMsgText"),
       imgMsgText: t("imgMsgText"),
       notiMsgText: t("notiMsgText"),
       robotMsgText: t("robotMsgText"),
@@ -58,7 +58,7 @@ export const getMsgContentTipByType = (msg: {
       return translate("callMsgText");
     case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION:
       // 返回位置消息的翻译提示文本
-      return translate("geoMsgText");
+      return translate("locationMsgText");
     case V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_NOTIFICATION:
       // 返回通知消息的翻译提示文本
       return translate("notiMsgText");

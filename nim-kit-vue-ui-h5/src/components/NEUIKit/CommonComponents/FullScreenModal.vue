@@ -22,7 +22,7 @@
 </template>
 
 <script lang="ts" setup>
-import { watch } from "vue";
+import { onUnmounted, watch } from "vue";
 import Icon from "./Icon.vue";
 import emitter from "../utils/eventBus";
 import { events } from "../utils/constants";
@@ -36,10 +36,27 @@ const emit = defineEmits<{
   (e: "back"): void;
 }>();
 
-// 打开全屏页面时停止语音播放
-watch(() => props.visible, (newVal) => {
-  if (newVal) {
-    emitter.emit(events.AUDIO_STOP_ALL);
+let previewActive = false;
+
+watch(
+  () => props.visible,
+  (visible) => {
+    if (visible && !previewActive) {
+      previewActive = true;
+      emitter.emit(events.AUDIO_STOP_ALL);
+      emitter.emit(events.MESSAGE_PREVIEW_OPEN);
+    } else if (!visible && previewActive) {
+      previewActive = false;
+      emitter.emit(events.MESSAGE_PREVIEW_CLOSE);
+    }
+  },
+  { immediate: true }
+);
+
+onUnmounted(() => {
+  if (previewActive) {
+    previewActive = false;
+    emitter.emit(events.MESSAGE_PREVIEW_CLOSE);
   }
 });
 </script>

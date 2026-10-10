@@ -45,6 +45,7 @@ export const isForwardableMessage = (store: RootStore, msg: V2NIMMessageForUI) =
     msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_TEXT ||
     msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_IMAGE ||
     msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_FILE ||
+    msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION ||
     msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_VIDEO
   )
 }

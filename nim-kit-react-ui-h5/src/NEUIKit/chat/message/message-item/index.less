@@ -99,6 +99,10 @@
   .msg-content {
     display: flex;
     flex-direction: column;
+    /* 默认的 align-items: stretch 会把子元素拉到容器宽度，而容器宽度由最宽的子元素决定：
+       昵称（最长 300px）比消息内容长时，短消息的 .msg-bg 会被撑到昵称那么宽，
+       合并转发详情页里一条短文本会显示成长气泡。改为让子元素各自按内容占宽。 */
+    align-items: flex-start;
   }
 
   .msg-name {

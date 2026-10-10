@@ -6,6 +6,10 @@
   padding: 0;
   box-sizing: border-box;
 
+  &-sending {
+    cursor: default;
+  }
+
   .msg-file {
     height: 56px;
     max-width: 100%;
@@ -22,13 +26,13 @@
   .msg-file-icon-wrapper {
     position: relative;
     // width: 40px;
-    height: 40px;
+    height: 32px;
     flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    overflow: hidden;
+    // overflow: hidden;
   }
 
   .msg-file-icon-wrapper-uploading::after {
@@ -98,12 +102,14 @@
     font-weight: 400;
     display: flex;
     min-width: 0;
-    line-height: 1;
+    line-height: 120%;
   }
 
   /* 文件名前缀 */
   .msg-file-title-prefix {
-    flex: 1;
+    /* 不能用 flex: 1 撑满整行：容器比文件名宽时（标记列表等块级容器），多出来的空间会被
+       前缀吃掉，短文件名和后缀之间就出现一大段空隙。改为按内容占宽，只有在放不下时才收缩并省略。 */
+    flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -112,6 +118,8 @@
 
   /* 文件名后缀 */
   .msg-file-title-suffix {
+    /* 后缀不参与收缩，始终紧贴在前缀后面 */
+    flex: 0 0 auto;
     max-width: 60px;
     overflow: hidden;
     text-overflow: ellipsis;

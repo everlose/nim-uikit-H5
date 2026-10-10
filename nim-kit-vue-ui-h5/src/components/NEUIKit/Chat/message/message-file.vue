@@ -1,7 +1,8 @@
 <template>
   <div
     class="msg-file-wrapper"
-    @click="() => downloadFile(url, name)"
+    :class="{ 'msg-file-wrapper-sending': isSending }"
+    @click="handleFileClick"
   >
     <div
       :class="!msg.isSelf ? 'msg-file msg-file-in' : 'msg-file msg-file-out'"
@@ -17,7 +18,7 @@
       <div class="msg-file-content">
         <div class="msg-file-title">
           <div class="msg-file-title-prefix">{{ prefixName }}</div>
-          <div class="msg-file-title-suffix">{{ ext }}</div>
+          <div v-if="ext.trim()" class="msg-file-title-suffix">{{ ext }}</div>
         </div>
         <div class="msg-file-size">{{ parseFileSize(size) }}</div>
       </div>
@@ -26,27 +27,15 @@
 </template>
 
 <script lang="ts" setup>
-import { getFileType, parseFileSize } from "@xkit-yx/utils";
+import { parseFileSize } from "@xkit-yx/utils";
 import Icon from "../../CommonComponents/Icon.vue";
 import { computed } from "vue";
 import type { V2NIMMessageForUI } from "@xkit-yx/im-store-v2/dist/types/src/types";
 import type { V2NIMMessageFileAttachment } from "nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService";
 import { V2NIMConst } from "nim-web-sdk-ng/dist/esm/nim";
-import { downloadFile } from "../../utils/file";
+import { downloadFile, getMessageFileIconType } from "../../utils/file";
 
 const props = withDefaults(defineProps<{ msg: V2NIMMessageForUI }>(), {});
-
-const fileIconMap = {
-  pdf: "icon-PPT",
-  word: "icon-Word",
-  excel: "icon-Excel",
-  ppt: "icon-PPT",
-  zip: "icon-RAR1",
-  txt: "icon-qita",
-  img: "icon-tupian2",
-  audio: "icon-yinle",
-  video: "icon-shipin",
-};
 
 const {
   name = "",
@@ -60,7 +49,7 @@ const index = name.lastIndexOf(".");
 const prefixName = index > -1 ? name.slice(0, index) : name;
 
 // 获取文件类型图标
-const iconType = fileIconMap[getFileType(ext)] || "icon-weizhiwenjian";
+const iconType = getMessageFileIconType(ext, name);
 
 const uploadProgress = computed(() => {
   const progress = Number((props.msg as V2NIMMessageForUI & { uploadProgress?: number }).uploadProgress || 0);
@@ -74,6 +63,17 @@ const isUploading = computed(
     uploadProgress.value < 100
 );
 
+const isSending = computed(
+  () =>
+    props.msg.sendingState ===
+    V2NIMConst.V2NIMMessageSendingState.V2NIM_MESSAGE_SENDING_STATE_SENDING
+);
+
+const handleFileClick = () => {
+  if (isSending.value) return;
+  downloadFile(url, name, ext);
+};
+
 const progressStyle = computed(() => ({
   "--file-upload-progress": `${uploadProgress.value * 3.6}deg`,
 }));
@@ -86,6 +86,10 @@ const progressStyle = computed(() => ({
   max-width: 63vw;
   padding: 0;
   box-sizing: border-box;
+}
+
+.msg-file-wrapper-sending {
+  cursor: default;
 }
 /* 文件消息基础样式 */
 .msg-file {
@@ -104,13 +108,12 @@ const progressStyle = computed(() => ({
 .msg-file-icon-wrapper {
   position: relative;
   /* width: 40px; */
-  height: 40px;
+  height: 32px;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  overflow: hidden;
 }
 
 .msg-file-icon-wrapper-uploading::after {
@@ -183,12 +186,14 @@ const progressStyle = computed(() => ({
   font-weight: 400;
   display: flex;
   min-width: 0;
-  line-height: 1;
+  line-height: 120%;
 }
 
 /* 文件名前缀 */
 .msg-file-title-prefix {
-  flex: 1;
+  /* 不能用 flex: 1 撑满整行：容器比文件名宽时（标记列表等块级容器），多出来的空间会被
+     前缀吃掉，短文件名和后缀之间就出现一大段空隙。改为按内容占宽，只有在放不下时才收缩并省略。 */
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -197,6 +202,8 @@ const progressStyle = computed(() => ({
 
 /* 文件名后缀 */
 .msg-file-title-suffix {
+  /* 后缀不参与收缩，始终紧贴在前缀后面 */
+  flex: 0 0 auto;
   max-width: 60px;
   overflow: hidden;
   text-overflow: ellipsis;

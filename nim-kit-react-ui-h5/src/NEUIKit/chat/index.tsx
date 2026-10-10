@@ -9,12 +9,17 @@ import { showModal } from '@/NEUIKit/common/utils/modal'
 import { showToast, toast } from '@/NEUIKit/common/utils/toast'
 import { neUiKitRouterPath } from '@/NEUIKit/common/utils/uikitRouter'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
+import type { V2NIMMessageRevokeNotification } from 'nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService'
 import emitter from '@/NEUIKit/common/utils/eventBus'
 
 import NetworkAlert from '@/NEUIKit/common/components/NetworkAlert'
 import NavBar from './message/nav-bar'
 import Icon from '@/NEUIKit/common/components/Icon'
-import MessageList from './message/message-list'
+import MessageList, {
+  type LatestVisibilitySource,
+  type MessageListHandle,
+  type MessageListScrollSnapshot
+} from './message/message-list'
 import MessageInput from './message/message-input'
 import MessageForward from './message/message-forward'
 import { useEventTracking } from '../common/hooks/useEventTracking'
@@ -38,6 +43,17 @@ interface YxReplyMsg {
   createTime: number
 }
 
+const getNewMessageReminderKey = (message: {
+  messageClientId?: string
+  messageServerId?: string
+}) => {
+  if (message.messageClientId) return `client:${message.messageClientId}`
+  if (message.messageServerId && message.messageServerId !== '0') {
+    return `server:${message.messageServerId}`
+  }
+  return ''
+}
+
 /**
  * 聊天组件
  */
@@ -59,7 +75,23 @@ const Chat = observer(() => {
   const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([])
   const [multiForwardMsgs, setMultiForwardMsgs] = useState<V2NIMMessageForUI[]>([])
   const [multiForwardMode, setMultiForwardMode] = useState<'oneByOne' | 'merge'>('oneByOne')
+  const [showBackToLatest, setShowBackToLatest] = useState(false)
+  const [newMessageCount, setNewMessageCount] = useState(0)
+  const [previewDepth, setPreviewDepth] = useState(0)
+  const latestButtonVisibleRef = useRef(false)
+  // 视口是否真的在列表底部。新消息提醒的“保持位置”与“清空计数”都以此为准，
+  // 不能再依赖会随消息内容变化的按钮显隐。
+  const latestAtBottomRef = useRef(true)
+  const anchorModeRef = useRef(false)
+  const isMultiSelectingRef = useRef(false)
+  const newMessageCountRef = useRef(0)
+  const pendingNewMessageKeysRef = useRef<Set<string>>(new Set())
+  const recalledNewMessageIdsRef = useRef<Set<string>>(new Set())
+  const previewDepthRef = useRef(0)
   const initialScrollKeyRef = useRef('')
+  const messageListRef = useRef<MessageListHandle>(null)
+  const multiSelectScrollSnapshotRef = useRef<MessageListScrollSnapshot | null>(null)
+  const previewScrollSnapshotRef = useRef<MessageListScrollSnapshot | null>(null)
 
   // 会话ID
   const currentConversationId = queryConversationId || selectedConversation
@@ -67,6 +99,49 @@ const Chat = observer(() => {
     lastConversationIdRef.current = currentConversationId
   }
   const conversationId = currentConversationId || lastConversationIdRef.current
+  isMultiSelectingRef.current = isMultiSelecting
+  newMessageCountRef.current = newMessageCount
+
+  const syncNewMessageCount = () => {
+    const count = pendingNewMessageKeysRef.current.size
+    newMessageCountRef.current = count
+    setNewMessageCount(count)
+  }
+
+  const clearNewMessageReminder = () => {
+    pendingNewMessageKeysRef.current.clear()
+    syncNewMessageCount()
+  }
+
+  useEffect(() => {
+    const handlePreviewOpen = () => {
+      if (previewDepthRef.current === 0) {
+        previewScrollSnapshotRef.current = messageListRef.current?.captureScrollPosition() || null
+      }
+      previewDepthRef.current += 1
+      setPreviewDepth(previewDepthRef.current)
+    }
+
+    const handlePreviewClose = () => {
+      if (previewDepthRef.current === 0) return
+      previewDepthRef.current -= 1
+      setPreviewDepth(previewDepthRef.current)
+      if (previewDepthRef.current !== 0) return
+
+      const snapshot = previewScrollSnapshotRef.current
+      previewScrollSnapshotRef.current = null
+      messageListRef.current?.restoreScrollPosition(snapshot)
+    }
+
+    emitter.on(events.MESSAGE_PREVIEW_OPEN, handlePreviewOpen)
+    emitter.on(events.MESSAGE_PREVIEW_CLOSE, handlePreviewClose)
+    return () => {
+      emitter.off(events.MESSAGE_PREVIEW_OPEN, handlePreviewOpen)
+      emitter.off(events.MESSAGE_PREVIEW_CLOSE, handlePreviewClose)
+      previewDepthRef.current = 0
+      previewScrollSnapshotRef.current = null
+    }
+  }, [])
 
   // 语音转文字结果存储 Map<messageClientId, text>，进入会话列表前保留在内存中
   const [voiceTextMap, setVoiceTextMap] = useState<Map<string, string>>(() => getVoiceTextMap(conversationId))
@@ -153,6 +228,8 @@ const Chat = observer(() => {
     setIsMultiSelecting(false)
     setSelectedMessageIds([])
     setMultiForwardMsgs([])
+    messageListRef.current?.restoreScrollPosition(multiSelectScrollSnapshotRef.current)
+    multiSelectScrollSnapshotRef.current = null
   }
 
   const handleReportClick = (e: React.MouseEvent) => {
@@ -172,6 +249,9 @@ const Chat = observer(() => {
 
   const enterMultiSelect = (msg: V2NIMMessageForUI) => {
     if (!isSelectableMessage(msg)) return
+    if (!isMultiSelecting) {
+      multiSelectScrollSnapshotRef.current = messageListRef.current?.captureScrollPosition() || null
+    }
     setIsMultiSelecting(true)
     setSelectedMessageIds([getMessageSelectKey(msg)])
     emitter.emit(events.CLOSE_PANEL)
@@ -325,7 +405,28 @@ const Chat = observer(() => {
     if (messages.length && !messages[0]?.isSelf && messages[0].conversationId === conversationId && location.pathname === neUiKitRouterPath.chat) {
       handleMsgReceipt(messages)
     }
-    if (handleIncomingMessages(messages)) {
+    const myUserAccountId = nim.V2NIMLoginService.getLoginUser()
+    const receivedMessages = messages.filter((message) =>
+      message.conversationId === conversationId &&
+      !message.isSelf &&
+      message.senderId !== myUserAccountId
+    )
+    const shouldKeepPosition =
+      isMultiSelectingRef.current ||
+      previewDepthRef.current > 0 ||
+      newMessageCountRef.current > 0 ||
+      !latestAtBottomRef.current ||
+      latestButtonVisibleRef.current ||
+      anchorModeRef.current
+    if (shouldKeepPosition && receivedMessages.length > 0) {
+      receivedMessages.forEach((message) => {
+        const key = getNewMessageReminderKey(message)
+        if (key) pendingNewMessageKeysRef.current.add(key)
+      })
+      syncNewMessageCount()
+    }
+
+    if (handleIncomingMessages(messages) && !shouldKeepPosition) {
       // 双 rAF 确保 React 重渲染 + 浏览器 layout 完成后再滚动
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -333,6 +434,21 @@ const Chat = observer(() => {
         })
       })
     }
+  }
+
+  const onMessageRevokeNotifications = (
+    notifications: V2NIMMessageRevokeNotification[]
+  ) => {
+    let changed = false
+    notifications.forEach(({ messageRefer }) => {
+      if (messageRefer.conversationId !== conversationId) return
+      const key = getNewMessageReminderKey(messageRefer)
+      if (key && pendingNewMessageKeysRef.current.delete(key)) {
+        recalledNewMessageIdsRef.current.add(`recall-${messageRefer.messageClientId}`)
+        changed = true
+      }
+    })
+    if (changed) syncNewMessageCount()
   }
 
   /**
@@ -414,6 +530,8 @@ const Chat = observer(() => {
     }
   })
 
+  anchorModeRef.current = anchorMode
+
   const selectedMessageIdSet = new Set(selectedMessageIds)
   const selectedMessages = msgs.filter((msg) => selectedMessageIdSet.has(getMessageSelectKey(msg)))
 
@@ -451,12 +569,37 @@ const Chat = observer(() => {
   }
 
   const backToLatestMsgs = async () => {
+    latestButtonVisibleRef.current = false
+    latestAtBottomRef.current = true
+    setShowBackToLatest(false)
+    clearNewMessageReminder()
+
+    if (!anchorMode) {
+      recalledNewMessageIdsRef.current.clear()
+      requestAnimationFrame(() => {
+        emitter.emit(events.ON_SCROLL_BOTTOM)
+      })
+      return
+    }
+
     navigate(`${neUiKitRouterPath.chat}?conversationId=${conversationId}`, { replace: true })
-    await switchToLatest()
+    await switchToLatest([...recalledNewMessageIdsRef.current])
+    recalledNewMessageIdsRef.current.clear()
     setTimeout(() => {
       emitter.emit(events.ON_SCROLL_BOTTOM)
     }, 0)
   }
+
+  const handleBackToLatestClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    backToLatestMsgs()
+  }
+
+  const showLatestAnchor = anchorMode
+    ? hasNewer || showLatestHint || showBackToLatest
+    : showBackToLatest || newMessageCount > 0
+  const latestMessageCountText = t('newMessagesText').replace('%d', String(newMessageCount))
 
   const handleSendMessage = () => {
     if (!anchorMode) return
@@ -632,14 +775,21 @@ const Chat = observer(() => {
 
     // 绑定事件监听
     nim.V2NIMMessageService.on('onReceiveMessages', onReceiveMessages)
+    nim.V2NIMMessageService.on('onMessageRevokeNotifications', onMessageRevokeNotifications)
     nim.V2NIMTeamService.on('onTeamDismissed', onTeamDismissed)
     nim.V2NIMTeamService.on('onTeamLeft', onTeamLeft)
 
     return () => {
       // 解绑事件监听
       nim.V2NIMMessageService.off('onReceiveMessages', onReceiveMessages)
+      nim.V2NIMMessageService.off('onMessageRevokeNotifications', onMessageRevokeNotifications)
       nim.V2NIMTeamService.off('onTeamDismissed', onTeamDismissed)
       nim.V2NIMTeamService.off('onTeamLeft', onTeamLeft)
+      pendingNewMessageKeysRef.current.clear()
+      recalledNewMessageIdsRef.current.clear()
+      // 切换会话后重新开始：新会话首屏会滚动到最新位置
+      latestAtBottomRef.current = true
+      latestButtonVisibleRef.current = false
     }
   }, [conversationId, handleIncomingMessages])
 
@@ -675,6 +825,7 @@ const Chat = observer(() => {
       {renderSecurityTip()}
 
       <MessageList
+        ref={messageListRef}
         conversationType={conversationType}
         to={to}
         msgs={msgs}
@@ -689,15 +840,42 @@ const Chat = observer(() => {
         autoScrollToBottom={!anchorMode}
         onLoadOlder={loadOlder}
         onLoadNewer={loadNewer}
+        onLatestVisibilityChange={(show, source: LatestVisibilitySource, atLatest?: boolean) => {
+          if (typeof atLatest === 'boolean') {
+            latestAtBottomRef.current = atLatest
+          }
+          latestButtonVisibleRef.current = show
+          setShowBackToLatest(show)
+          // 只有真的滚到列表底部才清空新消息提醒：
+          // atLatest 只取决于滚动位置，不会被撤回等消息内容变化影响，避免误清未读计数。
+          if (
+            source === 'scroll' &&
+            atLatest === true &&
+            !isMultiSelectingRef.current &&
+            previewDepthRef.current === 0 &&
+            (!anchorModeRef.current || (!hasNewer && !showLatestHint))
+          ) {
+            clearNewMessageReminder()
+          }
+        }}
         isMultiSelecting={isMultiSelecting}
+        isScrollLocked={previewDepth > 0}
         selectedMessageIds={selectedMessageIds}
         onToggleSelect={toggleSelectMessage}
         onMultiSelect={enterMultiSelect}
       />
 
-      {anchorMode && (hasNewer || showLatestHint) && (
-        <div className="msg-anchor-latest" onClick={backToLatestMsgs}>
-          {loadingNewer ? <Icon type="icon-a-Frame8" size={20} iconClassName="msg-anchor-loading" /> : <Icon type="icon-jiantou" size={20} />}
+      {!isMultiSelecting && showLatestAnchor && (
+        <div
+          className={`msg-anchor-latest${newMessageCount > 0 ? ' msg-anchor-latest-with-text' : ''}`}
+          onPointerDown={(event) => event.stopPropagation()}
+          onTouchStart={(event) => event.stopPropagation()}
+          onClick={handleBackToLatestClick}
+        >
+          <Icon type="icon-chat-message-arrow-bottom" size={16} />
+          {newMessageCount > 0 && (
+            <span className="msg-anchor-latest-text">{latestMessageCountText}</span>
+          )}
         </div>
       )}
 

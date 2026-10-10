@@ -86,6 +86,7 @@ import IconGuanyu from '../../../static/icons/icon-guanyu.png'
 import IconHuifu from '../../../static/icons/icon-huifu.png'
 import IconImXuanzhong from '../../../static/icons/icon-im-xuanzhong.png'
 import IconJiantou from '../../../static/icons/icon-jiantou.png'
+import IconChatMessageArrowBottom from '../../../static/icons/icon-chat-message-arrow-bottom.svg'
 import IconJiaruqunzu from '../../../static/icons/icon-jiaruqunzu.png'
 import IconKefu from '../../../static/icons/icon-kefu.png'
 import IconLahei from '../../../static/icons/icon-lahei.png'
@@ -93,6 +94,19 @@ import IconLishixiaoxi from '../../../static/icons/icon-lishixiaoxi.png'
 import IconAdd from '../../../static/icons/icon-Add.svg'
 import IconMore from '../../../static/icons/icon-More.svg'
 import IconPPT from '../../../static/icons/icon-PPT.png'
+import IconPdfFile from '../../../static/icons/icon-pdf-file.svg'
+import IconHtmlFile from '../../../static/icons/icon-html-file.svg'
+import IconAosWord from '../../../static/icons/icon-aos-word.svg'
+import IconAosExcel from '../../../static/icons/icon-aos-excel.svg'
+import IconAosPpt from '../../../static/icons/icon-aos-ppt.svg'
+import IconAosImage from '../../../static/icons/icon-aos-image.svg'
+import IconAosRar from '../../../static/icons/icon-aos-rar.svg'
+import IconAosPdf from '../../../static/icons/icon-aos-pdf.svg'
+import IconAosText from '../../../static/icons/icon-aos-text.svg'
+import IconAosHtml from '../../../static/icons/icon-aos-html.svg'
+import IconAosVideo from '../../../static/icons/icon-aos-video.svg'
+import IconAosMp3 from '../../../static/icons/icon-aos-mp3.svg'
+import IconAosUnknown from '../../../static/icons/icon-aos-unknown.svg'
 import IconQita from '../../../static/icons/icon-qita.png'
 import IconQuxiaoxiaoximiandarao from '../../../static/icons/icon-quxiaoxiaoximiandarao.png'
 import IconQuxiaozhiding from '../../../static/icons/icon-quxiaozhiding.png'
@@ -249,6 +263,7 @@ const urlMap: Record<string, string> = {
   'icon-huifu': IconHuifu,
   'icon-im-xuanzhong': IconImXuanzhong,
   'icon-jiantou': IconJiantou,
+  'icon-chat-message-arrow-bottom': IconChatMessageArrowBottom,
   'icon-jiaruqunzu': IconJiaruqunzu,
   'icon-kefu': IconKefu,
   'icon-lahei': IconLahei,
@@ -256,6 +271,19 @@ const urlMap: Record<string, string> = {
   'icon-add': IconAdd,
   'icon-More': IconMore,
   'icon-PPT': IconPPT,
+  'icon-pdf-file': IconPdfFile,
+  'icon-html-file': IconHtmlFile,
+  'icon-aos-word': IconAosWord,
+  'icon-aos-excel': IconAosExcel,
+  'icon-aos-ppt': IconAosPpt,
+  'icon-aos-image': IconAosImage,
+  'icon-aos-rar': IconAosRar,
+  'icon-aos-pdf': IconAosPdf,
+  'icon-aos-text': IconAosText,
+  'icon-aos-html': IconAosHtml,
+  'icon-aos-video': IconAosVideo,
+  'icon-aos-mp3': IconAosMp3,
+  'icon-aos-unknown': IconAosUnknown,
   'icon-qita': IconQita,
   'icon-quxiaoxiaoximiandarao': IconQuxiaoxiaoximiandarao,
   'icon-quxiaozhiding': IconQuxiaozhiding,
@@ -357,6 +385,10 @@ export interface IconProps {
    * 点击事件
    */
   onClick?: (e: React.MouseEvent<HTMLSpanElement>) => void
+  /**
+   * 使用 CSS 背景图，避免移动端将图标识别为可保存图片
+   */
+  disableNativeLongPress?: boolean
 }
 
 /**
@@ -364,7 +396,7 @@ export interface IconProps {
  * @param props 组件属性
  * @returns Icon组件
  */
-const Icon: React.FC<IconProps> = ({ type, size = 16, width, height, iconClassName = '', style = {}, onClick }) => {
+const Icon: React.FC<IconProps> = ({ type, size = 16, width, height, iconClassName = '', style = {}, onClick, disableNativeLongPress = false }) => {
   // 获取图标URL
   const iconUrl = urlMap[type]
 
@@ -374,15 +406,28 @@ const Icon: React.FC<IconProps> = ({ type, size = 16, width, height, iconClassNa
 
   return (
     <span className={`nim-icon-wrapper ${iconClassName}`} style={style} onClick={onClick}>
-      <img
-        src={iconUrl}
-        style={{
-          width: `${finalWidth}px`,
-          height: `${finalHeight}px`
-        }}
-        className="icon"
-        alt={`icon-${type}`}
-      />
+      {disableNativeLongPress ? (
+        <span
+          className="icon icon-background"
+          aria-hidden="true"
+          style={{
+            width: `${finalWidth}px`,
+            height: `${finalHeight}px`,
+            backgroundImage: `url(${iconUrl})`,
+          }}
+        />
+      ) : (
+        <img
+          src={iconUrl}
+          draggable={false}
+          style={{
+            width: `${finalWidth}px`,
+            height: `${finalHeight}px`
+          }}
+          className="icon"
+          alt={`icon-${type}`}
+        />
+      )}
     </span>
   )
 }

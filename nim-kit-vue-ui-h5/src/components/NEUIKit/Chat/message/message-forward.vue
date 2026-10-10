@@ -469,7 +469,8 @@ const recentForwards = computed(() => {
         : rf.type === "team"
           ? V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM
           : (V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P as number),
-      name: rf.name || conv?.name || "",
+      // 名称优先用最近会话列表里的（可能已被改名），本地存的只是兜底
+      name: conv?.name || rf.name || "",
       avatar: conv?.avatar,
     };
   });
@@ -623,17 +624,6 @@ const handleForwardConfirm = (forwardComment: string) => {
       .then(() => {
         toast.info(t("forwardSuccessText"));
         emit("forwardSuccess");
-        targets.forEach((target) => {
-          addRecentForward({
-            id: target.id,
-            type:
-              target.type ===
-              V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P
-                ? "p2p"
-                : "team",
-            name: target.name,
-          }, myAccountId.value);
-        });
         // 若目标包含当前会话，转发消息会出现在当前聊天页，需滚动到底部展示新消息
         if (
           targets.some((target) => {
@@ -653,6 +643,19 @@ const handleForwardConfirm = (forwardComment: string) => {
         toast.info(t("forwardFailedText"));
       })
       .finally(() => {
+        // “最近转发”记录的是用户选过的转发目标，与发送成功与否无关：
+        // 只写在成功分支里的话，转发失败（如会话被禁言）后再进选择器就找不到这个会话了
+        targets.forEach((target) => {
+          addRecentForward({
+            id: target.id,
+            type:
+              target.type ===
+              V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P
+                ? "p2p"
+                : "team",
+            name: target.name,
+          }, myAccountId.value);
+        });
         forwardTargets.value = [];
         handleClose();
       });
@@ -689,19 +692,14 @@ const handleForwardConfirm = (forwardComment: string) => {
           )
         );
 
+  const isP2pTarget =
+    forwardConversationType.value ===
+    V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P;
+
   Promise.resolve(forwardPromise)
     .then(() => {
       toast.info(t("forwardSuccessText"));
       emit("forwardSuccess");
-      addRecentForward({
-        id: forwardTo.value,
-        type:
-          forwardConversationType.value ===
-          V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P
-            ? "p2p"
-            : "team",
-        name: "",
-      }, myAccountId.value);
       // 转发到当前会话时，新消息会出现在当前聊天页，需滚动到底部展示
       if (forwardConversationId === conversationId.value) {
         scrollChatToBottom();
@@ -711,6 +709,19 @@ const handleForwardConfirm = (forwardComment: string) => {
       toast.info(t("forwardFailedText"));
     })
     .finally(() => {
+      // “最近转发”记录的是用户选过的转发目标，与发送成功与否无关：
+      // 只写在成功分支里的话，转发失败（如会话被禁言）后再进选择器就找不到这个会话了。
+      // 名称一起存下来：群聊按名称展示，目标不在最近会话列表里时不能是空名字
+      addRecentForward(
+        {
+          id: forwardTo.value,
+          type: isP2pTarget ? "p2p" : "team",
+          name: isP2pTarget
+            ? store?.uiStore.getAppellation({ account: forwardTo.value }) || ""
+            : store?.teamStore.teams.get(forwardTo.value)?.name || "",
+        },
+        myAccountId.value
+      );
       handleClose();
     });
 };

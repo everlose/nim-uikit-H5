@@ -48,7 +48,7 @@
         </FormInput>
       </div>
     </div>
-    <button class="login-btn" @click="submitLoginForm()">
+    <button class="login-btn" :disabled="loginSubmitting" @click="submitLoginForm()">
       {{ i18n.loginBtnTitle }}
     </button>
   </div>
@@ -88,6 +88,7 @@ const loginForm = reactive({
   mobile: "",
   smsCode: "",
 });
+const loginSubmitting = ref(false);
 
 const smsText = computed(() => {
   if (smsCount.value > 0 && smsCount.value < 60) {
@@ -135,6 +136,8 @@ async function startSmsCount() {
 
 // 登录
 async function submitLoginForm() {
+  if (loginSubmitting.value) return;
+
   if (
     !mobileInputRule.reg.test(loginForm.mobile) ||
     !smsCodeInputRule.reg.test(loginForm.smsCode)
@@ -145,6 +148,7 @@ async function submitLoginForm() {
     });
     return;
   }
+  loginSubmitting.value = true;
   try {
     const res = await loginRegisterByCode(loginForm);
     // 存储登录信息到 localStorage
@@ -173,24 +177,21 @@ async function submitLoginForm() {
       nim.V2NIMLoginService.off("onKickedOffline", handelKickedOffline);
     };
 
-    nim.V2NIMLoginService.login(res.imAccid, res.imToken)
-      .then(() => {
-        // IM 登录成功后跳转到会话页面
-        router.push(neUiKitRouterPath.conversation);
-        nim.V2NIMLoginService.on("onKickedOffline", handelKickedOffline);
-      })
-      .catch((error) => {
-        if (error.code === 102422) {
-          // 账号被封禁
-          showToast({
-            message: "当前账号已被封禁",
-            type: "info",
-          });
-          // 登录信息无效，清除并跳转到登录页
-          localStorage.removeItem("__yx_im_options__h5");
-        }
-      });
+    await nim.V2NIMLoginService.login(res.imAccid, res.imToken);
+    // IM 登录成功后跳转到会话页面
+    router.push(neUiKitRouterPath.conversation);
+    nim.V2NIMLoginService.on("onKickedOffline", handelKickedOffline);
   } catch (error: any) {
+    if (error.code === 102422) {
+      // 账号被封禁
+      showToast({
+        message: "当前账号已被封禁",
+        type: "info",
+      });
+      // 登录信息无效，清除并跳转到登录页
+      localStorage.removeItem("__yx_im_options__h5");
+      return;
+    }
     let msg = error.errMsg || error.msg || error.message || i18n.smsCodeFailMsg;
     if (msg.startsWith("request:fail")) {
       msg = i18n.loginNetworkErrorMsg;
@@ -199,6 +200,8 @@ async function submitLoginForm() {
       message: msg,
       type: "info",
     });
+  } finally {
+    loginSubmitting.value = false;
   }
 }
 </script>
@@ -274,5 +277,10 @@ async function submitLoginForm() {
   font-size: 16px;
   left: 50%;
   transform: translateX(-50%);
+}
+
+.login-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 </style>

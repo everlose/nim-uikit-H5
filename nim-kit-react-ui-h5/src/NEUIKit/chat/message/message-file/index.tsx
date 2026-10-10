@@ -1,11 +1,11 @@
 import React from 'react'
 import { observer } from 'mobx-react-lite'
-import { getFileType, parseFileSize } from '@xkit-yx/utils'
+import { parseFileSize } from '@xkit-yx/utils'
 import Icon from '@/NEUIKit/common/components/Icon'
 import { V2NIMConst } from 'nim-web-sdk-ng/dist/esm/nim'
 import type { V2NIMMessageForUI } from '@xkit-yx/im-store-v2/dist/types/src/types'
 import type { V2NIMMessageFileAttachment } from 'nim-web-sdk-ng/dist/esm/nim/src/V2NIMMessageService'
-import { downloadFile } from '@/NEUIKit/common/utils/file'
+import { downloadFile, getMessageFileIconType } from '@/NEUIKit/common/utils/file'
 import './index.less'
 
 interface MessageFileProps {
@@ -16,24 +16,11 @@ interface MessageFileProps {
  * 文件消息组件
  */
 const MessageFile: React.FC<MessageFileProps> = observer(({ msg }) => {
-  // 文件图标映射
-  const fileIconMap: Record<string, string> = {
-    pdf: 'icon-PPT',
-    word: 'icon-Word',
-    excel: 'icon-Excel',
-    ppt: 'icon-PPT',
-    zip: 'icon-RAR1',
-    txt: 'icon-qita',
-    img: 'icon-tupian2',
-    audio: 'icon-yinle',
-    video: 'icon-shipin'
-  }
-
   // 获取文件信息
   const { name = '', url = '', ext = '', size = 0 } = (msg.attachment as V2NIMMessageFileAttachment) || {}
 
   // 文件图标类型
-  const iconType = fileIconMap[getFileType(ext)] || 'icon-weizhiwenjian'
+  const iconType = getMessageFileIconType(ext, name)
 
   // 处理文件名显示
   const index = name.lastIndexOf('.')
@@ -42,12 +29,18 @@ const MessageFile: React.FC<MessageFileProps> = observer(({ msg }) => {
 
   const uploadProgress = Math.max(0, Math.min(100, Number((msg as V2NIMMessageForUI & { uploadProgress?: number }).uploadProgress || 0)))
   const isUploading = msg.sendingState === V2NIMConst.V2NIMMessageSendingState.V2NIM_MESSAGE_SENDING_STATE_SENDING && uploadProgress < 100
+  const isSending = msg.sendingState === V2NIMConst.V2NIMMessageSendingState.V2NIM_MESSAGE_SENDING_STATE_SENDING
   const progressStyle = {
     '--file-upload-progress': `${uploadProgress * 3.6}deg`
   } as React.CSSProperties
 
+  const handleFileClick = () => {
+    if (isSending) return
+    downloadFile(url, name, ext)
+  }
+
   return (
-    <div className="msg-file-wrapper" onClick={() => downloadFile(url, name)}>
+    <div className={`msg-file-wrapper ${isSending ? 'msg-file-wrapper-sending' : ''}`} onClick={handleFileClick}>
       <div className={!msg.isSelf ? 'msg-file msg-file-in' : 'msg-file msg-file-out'}>
         <div className={`msg-file-icon-wrapper ${isUploading ? 'msg-file-icon-wrapper-uploading' : ''}`} style={progressStyle}>
           <Icon type={iconType} size={32} iconClassName="msg-file-icon" />
@@ -56,7 +49,7 @@ const MessageFile: React.FC<MessageFileProps> = observer(({ msg }) => {
         <div className="msg-file-content">
           <div className="msg-file-title">
             <div className="msg-file-title-prefix">{prefixName}</div>
-            <div className="msg-file-title-suffix">{ext}</div>
+            {ext.trim() && <div className="msg-file-title-suffix">{ext}</div>}
           </div>
           <div className="msg-file-size">{parseFileSize(size)}</div>
         </div>

@@ -148,7 +148,8 @@ const MessageForward: React.FC<{
           : rf.type === 'team'
             ? V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_TEAM
             : V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P,
-        name: rf.name || conv?.name || '',
+        // 名称优先用最近会话列表里的（可能已被改名），本地存的只是兜底
+        name: conv?.name || rf.name || '',
         avatar: conv?.avatar,
       }
     })
@@ -284,6 +285,13 @@ const MessageForward: React.FC<{
         .then(() => {
           toast.info(t('forwardSuccessText'))
           onForwardSuccess?.()
+        })
+        .catch(() => {
+          toast.info(t('forwardFailedText'))
+        })
+        .finally(() => {
+          // “最近转发”记录的是用户选过的转发目标，与发送成功与否无关：
+          // 只写在成功分支里的话，转发失败（如会话被禁言）后再进选择器就找不到这个会话了
           targets.forEach((target) => {
             addRecentForward({
               id: target.id,
@@ -291,11 +299,6 @@ const MessageForward: React.FC<{
               name: target.name
             }, myAccountId)
           })
-        })
-        .catch(() => {
-          toast.info(t('forwardFailedText'))
-        })
-        .finally(() => {
           setForwardTargets([])
           onClose()
         })
@@ -325,20 +328,27 @@ const MessageForward: React.FC<{
             : []
         ))
 
+    const isP2pTarget = forwardConversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P
+
     Promise.resolve(forwardPromise)
       .then(() => {
         toast.info(t('forwardSuccessText'))
         onForwardSuccess?.()
-        addRecentForward({
-          id: forwardTo,
-          type: forwardConversationType === V2NIMConst.V2NIMConversationType.V2NIM_CONVERSATION_TYPE_P2P ? 'p2p' : 'team',
-          name: ''
-        }, myAccountId)
       })
       .catch(() => {
         toast.info(t('forwardFailedText'))
       })
       .finally(() => {
+        // “最近转发”记录的是用户选过的转发目标，与发送成功与否无关：
+        // 只写在成功分支里的话，转发失败（如会话被禁言）后再进选择器就找不到这个会话了。
+        // 名称一起存下来：群聊按名称展示，目标不在最近会话列表里时不能是空名字
+        addRecentForward({
+          id: forwardTo,
+          type: isP2pTarget ? 'p2p' : 'team',
+          name: isP2pTarget
+            ? store.uiStore.getAppellation({ account: forwardTo })
+            : store.teamStore.teams.get(forwardTo)?.name || ''
+        }, myAccountId)
         onClose()
       })
   }, [forwardMsgs, forwardConversationType, forwardTo, forwardTargets, isMergeForward, conversationId, store, nim, t, onForwardSuccess, onClose])

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import { useNavigate } from '@/utils/router'
 
 import FormInput from './FormInput'
@@ -31,6 +31,8 @@ const LoginForm: React.FC = () => {
     mobile: '',
     smsCode: ''
   })
+  const [loginSubmitting, setLoginSubmitting] = useState(false)
+  const loginSubmittingRef = useRef(false)
 
   // 手机号输入规则
   const mobileInputRule = {
@@ -106,12 +108,16 @@ const LoginForm: React.FC = () => {
 
   // 提交登录表单
   const submitLoginForm = async () => {
+    if (loginSubmittingRef.current) return
+
     // 表单验证
     if (!mobileInputRule.reg.test(loginForm.mobile) || !smsCodeInputRule.reg.test(loginForm.smsCode)) {
       toast.info(i18n.mobileOrSmsCodeErrorMsg)
       return
     }
 
+    loginSubmittingRef.current = true
+    setLoginSubmitting(true)
     try {
       // 登录请求
       const res = await loginRegisterByCode(loginForm)
@@ -126,10 +132,9 @@ const LoginForm: React.FC = () => {
       )
 
       // 执行 IM 登录（使用 Provider 中的 nim 实例，避免创建重复实例）
-      nim.V2NIMLoginService.login(res.imAccid, res.imToken).then(() => {
-        // IM 登录成功后跳转到会话页面
-        navigate(neUiKitRouterPath.conversation)
-      })
+      await nim.V2NIMLoginService.login(res.imAccid, res.imToken)
+      // IM 登录成功后跳转到会话页面
+      navigate(neUiKitRouterPath.conversation)
     } catch (error: any) {
       // 处理错误
       let msg = error.errMsg || error.msg || error.message || i18n.loginFailMsg
@@ -137,6 +142,9 @@ const LoginForm: React.FC = () => {
         msg = i18n.loginNetworkErrorMsg
       }
       toast.info(msg)
+    } finally {
+      loginSubmittingRef.current = false
+      setLoginSubmitting(false)
     }
   }
 
@@ -178,7 +186,7 @@ const LoginForm: React.FC = () => {
           />
         </div>
       </div>
-      <button className="login-btn" onClick={submitLoginForm}>
+      <button className="login-btn" disabled={loginSubmitting} onClick={submitLoginForm}>
         {i18n.loginBtnTitle}
       </button>
     </div>

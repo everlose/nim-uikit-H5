@@ -14,10 +14,12 @@ import MessageForward from '@/NEUIKit/chat/message/message-forward'
 import MessageText from '@/NEUIKit/chat/message/message-text'
 import MessageAudio from '@/NEUIKit/chat/message/message-audio'
 import MessageFile from '@/NEUIKit/chat/message/message-file'
+import MessageLocation from '@/NEUIKit/chat/message/message-location'
 import MergedForwardModal from '@/NEUIKit/chat/message/merged-forward/modal'
 import { useTranslation } from '@/NEUIKit/common/hooks/useTranslate'
 import { useStateContext } from '@/NEUIKit/common/hooks/useStateContext'
 import { copyText } from '@/NEUIKit/common/utils'
+import { buildFileDownloadUrl } from '@/NEUIKit/common/utils/file'
 import { toast } from '@/NEUIKit/common/utils/toast'
 import { showModal } from '@/NEUIKit/common/utils/modal'
 import { getMsgContentTipByType } from '@/NEUIKit/common/utils/msg'
@@ -66,10 +68,7 @@ const getVideoFirstFrameUrl = (msg?: V2NIMMessageForUI) => {
 
 const getFileDownloadUrl = (msg: V2NIMMessageForUI) => {
   const attachment = msg.attachment as V2NIMMessageFileAttachment | undefined
-  const url = attachment?.url || ''
-  if (!url) return ''
-  const name = attachment?.name || ''
-  return url + (url.includes('?') ? '&' : '?') + `download=${encodeURIComponent(name)}`
+  return buildFileDownloadUrl(attachment?.url || '', attachment?.name || '', attachment?.ext || '')
 }
 
 const Collection: React.FC = observer(() => {
@@ -311,6 +310,14 @@ const Collection: React.FC = observer(() => {
             <div className="collection-video-play-icon"></div>
           </div>
           <img className="collection-video-cover" style={getCollectionImageStyle(msg)} src={getVideoFirstFrameUrl(msg)} alt="" />
+        </div>
+      )
+    }
+
+    if (msg.messageType === V2NIMConst.V2NIMMessageType.V2NIM_MESSAGE_TYPE_LOCATION) {
+      return (
+        <div className="collection-location-preview" onClick={(event) => event.stopPropagation()}>
+          <MessageLocation msg={msg} isSelf={msg.isSelf} />
         </div>
       )
     }

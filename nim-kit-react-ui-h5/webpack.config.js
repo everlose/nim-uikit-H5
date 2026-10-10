@@ -9,6 +9,13 @@ const Dotenv = require('dotenv-webpack')
 module.exports = (env, argv) => {
   const isDevelopment = argv.mode === 'development'
   const isServe = process.env.WEBPACK_SERVE === 'true'
+
+  // devServer 下 HMR 需要稳定的 chunk 文件名，所以只有它用 [name].js；
+  // 其余一次性构建（npm run build / npm run build:dev）一律带 contenthash。
+  // 目的：测服走 `npm run build:dev`，若产物文件名不带 hash，改了 main.js 内容文件名也不变，
+  // 浏览器缓存无法失效（nginx 只保证 html 不缓存，html 引用的固定名 js 仍会命中缓存）。
+  // 带上 contenthash 后产物变为内容寻址，配合 html 的 no-cache 即可正确更新。
+  const useContentHash = !(isServe && isDevelopment)
   
   // 根据 --env envFile 参数决定加载哪个配置文件
   // envFile=local      → .env.local      (npm run dev)
@@ -32,8 +39,8 @@ module.exports = (env, argv) => {
     
     output: {
       path: path.resolve(__dirname, 'dist'),
-      filename: isDevelopment ? '[name].js' : '[name].[contenthash].js',
-      chunkFilename: isDevelopment ? '[name].chunk.js' : '[name].[contenthash].chunk.js',
+      filename: useContentHash ? '[name].[contenthash].js' : '[name].js',
+      chunkFilename: useContentHash ? '[name].[contenthash].chunk.js' : '[name].chunk.js',
       clean: true,
       // devServer 使用 '/'，打包构建使用 './'
       publicPath: isServe ? '/' : './',
